@@ -1,6 +1,6 @@
 import numpy as np
-from dataset_generation.advanced_generator import bad_generations_replacement_if_needed
-from dataset_generation.basic_generator import label_to_generator, basic_generator
+from dataset_functions.dataset_generation.advanced_generator import bad_generations_replacement_if_needed
+from dataset_functions.dataset_generation.basic_generator import label_to_generator, basic_generator
 
 
 def generate_hard_map_by_label(label, N):

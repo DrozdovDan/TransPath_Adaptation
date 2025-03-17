@@ -1,5 +1,5 @@
 import numpy as np
-from map_generators.island_maps import generate_islands
+from dataset_functions.map_generators.island_maps import generate_islands
 
 
 # Функция сглаживания карты

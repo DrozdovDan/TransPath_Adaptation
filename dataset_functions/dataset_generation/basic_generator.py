@@ -1,12 +1,12 @@
 import numpy as np
 from tqdm import tqdm
 
-from ABCD.ABCD import generate_BCD
-from map_generators.QR_maps import generate_QRs
-from map_generators.band_maps import generate_bands
-from map_generators.bug_trap_maps import generate_noisy_bug_traps
-from map_generators.cave_maps import generate_caves
-from map_generators.island_maps import generate_islands
+from dataset_functions.ABCD.ABCD import generate_BCD
+from dataset_functions.map_generators.QR_maps import generate_QRs
+from dataset_functions.map_generators.band_maps import generate_bands
+from dataset_functions.map_generators.bug_trap_maps import generate_noisy_bug_traps
+from dataset_functions.map_generators.cave_maps import generate_caves
+from dataset_functions.map_generators.island_maps import generate_islands
 
 
 label_to_generator = {

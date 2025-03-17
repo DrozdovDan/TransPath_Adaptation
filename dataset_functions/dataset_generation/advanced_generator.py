@@ -1,5 +1,5 @@
 import numpy as np
-from dataset_generation.basic_generator import basic_generator
+from dataset_functions.dataset_generation.basic_generator import basic_generator
 
 variety_threshold = 553     # np.sum(dijkstra_single_map(np.ones((11, 11)), (6, 6))) округленное вверх
 hardness_threshold = 1.05
