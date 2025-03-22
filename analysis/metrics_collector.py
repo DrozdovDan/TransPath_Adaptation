@@ -149,11 +149,11 @@ class GridDataTest(Dataset):
 
         self.maps   = cells
         starts_grid = np.zeros_like(cells)
-        starts_grid[:, 0, starts[:, 0], starts[:, 1]] = 1
+        starts_grid[np.arange(cells.shape[0]), 0, starts[:, 0], starts[:, 1]] = 1
         goals_grid = np.zeros_like(cells)
-        goals_grid[:, 0, goals[:, 0], goals[:, 1]] = 1
-        self.goals  = starts_grid
-        self.starts = goals_grid
+        goals_grid[np.arange(cells.shape[0]), 0, goals[:, 0], goals[:, 1]] = 1
+        self.goals  = goals_grid
+        self.starts = starts_grid
 
 
     def __len__(self):
@@ -193,4 +193,48 @@ def cfastar_octile_search_with_prediction(cells: np.ndarray, starts: np.ndarray,
         np.save(save_predictions_to, predictions)
     
     return cfastar_octile_search(cells, starts, goals, predictions, verbose=verbose)
+
+def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws: list[int]=None, cfs: np.ndarray=None, model: nn.Module=None, save_predictions_to: str=None, verbose: int=1):
+    assert (cfs is not None) ^ (model is not None)
+
+    baseline = astar_octile_search(cells, starts, goals, verbose=verbose)
+
+    model_df = None
+    
+    if model:
+        model_df = cfastar_octile_search_with_prediction(cells, starts, goals, model, save_predictions_to, verbose=verbose)
+    else:
+        model_df = cfastar_octile_search(cells, starts, goals, cfs, verbose=verbose)
+
+    w_dfs = {}
+
+    if ws:
+        iterator = ws
+        if verbose > 0:
+            iterator = tqdm(ws, desc='Computing WA* statistics')
+        for w in iterator:
+            w_dfs[w] = wastar_octile_search(cells, starts, goals, w, verbose=verbose)
+
+    baseline_array = baseline[['path_length', 'expanded_nodes_num']].to_numpy()
+    model_array = model_df[['path_length', 'expanded_nodes_num']].to_numpy()
+
+    w_arrays = {}
+
+    if w_dfs:
+        w_arrays = {w : df[['path_length', 'expanded_nodes_num']].to_numpy() for w, df in w_dfs.items()}
+
+    results = {}
+
+    results['baseline'] = pd.DataFrame(baseline_array / baseline_array, columns=['path_length', 'expanded_nodes_num'])
+    results['model'] = pd.DataFrame(model_array / baseline_array, columns=['path_length', 'expanded_nodes_num'])
+
+    if w_arrays:
+        results.update({f'w={w}' : pd.DataFrame(array / baseline_array, columns=['path_length', 'expanded_nodes_num']) for w, array in w_arrays.items()})
+
+    return results
+
+    
+
+
+    
         
