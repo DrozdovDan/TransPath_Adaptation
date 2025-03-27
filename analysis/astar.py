@@ -10,7 +10,8 @@ import numpy as np
 import numpy.typing as npt
 from PIL import Image, ImageDraw
 import pandas as pd
-from tqdm import tqdm
+from tqdm.auto import tqdm
+import math
 epsilon = 1e-9
 
 
@@ -222,8 +223,34 @@ class Node:
         """
         Compares the keys (i.e., the f-values) of two nodes, needed for sorting/extracting the best element from OPEN.
         """
-        if abs(self.f - other.f) < epsilon: # tie-break
+        return self.f < other.f
+    
+class NodeOptimal(Node):
+
+    def __lt__(self, other):
+        """
+        Compares the keys (i.e., the f-values) of two nodes, needed for sorting/extracting the best element from OPEN.
+        """
+        if math.isclose(self.f, other.f):
+            if math.isclose(self.g, other.g):
+                if self.i == other.i:
+                    return self.j < other.j
+                return self.i < other.i
             return self.g > other.g
+        return self.f < other.f
+    
+class NodeAntiOptimal(Node):
+
+    def __lt__(self, other):
+        """
+        Compares the keys (i.e., the f-values) of two nodes, needed for sorting/extracting the best element from OPEN.
+        """
+        if math.isclose(self.f, other.f):
+            if math.isclose(self.g, other.g):
+                if self.i == other.i:
+                    return self.j < other.j
+                return self.i < other.i
+            return self.g < other.g
         return self.f < other.f
     
 class SearchTreePQD:
@@ -480,6 +507,7 @@ def astar(
     goal_j: int,
     heuristics: np.ndarray,
     search_tree: Type[SearchTreePQD],
+    node_type: str='optimal',
 ) -> Tuple[bool, Optional[Node], int, int, Optional[Iterable[Node]], Optional[Iterable[Node]]]:
     """
     Implements the A* search algorithm.
@@ -508,13 +536,20 @@ def astar(
         - OPEN set nodes for visualization or None.
         - CLOSED set nodes.
     """
+    LocalNode = Node
+
+    if node_type == 'optimal':
+        LocalNode = NodeOptimal
+    elif node_type == 'anti-optimal':
+        LocalNode = NodeAntiOptimal
+
     ast = search_tree()
     steps = 0
 
-    start_node = Node(start_i, start_j, g=0, h=heuristics[start_i, start_j])
+    start_node = LocalNode(start_i, start_j, g=0, h=heuristics[start_i, start_j])
     ast.add_to_open(start_node)
 
-    goal_node = Node(goal_i, goal_j)
+    goal_node = LocalNode(goal_i, goal_j)
 
     while not ast.open_is_empty():
         steps += 1
@@ -525,7 +560,7 @@ def astar(
             return True, best, steps, len(ast), ast.opened, ast.expanded
         neighbours = task_map.get_neighbors(best.i, best.j)
         for neighbour in neighbours:
-            cur_node = Node(neighbour[0], neighbour[1], g=(best.g + compute_cost(best.i, best.j, neighbour[0], neighbour[1])), h=heuristics[neighbour[0], neighbour[1]], parent=best)
+            cur_node = LocalNode(neighbour[0], neighbour[1], g=(best.g + compute_cost(best.i, best.j, neighbour[0], neighbour[1])), h=heuristics[neighbour[0], neighbour[1]], parent=best)
             if not ast.was_expanded(cur_node):
                 ast.add_to_open(cur_node)
         ast.add_to_closed(best)
@@ -542,6 +577,7 @@ def cfastar(
     heuristics: np.ndarray,
     cf: np.ndarray,
     search_tree: Type[SearchTreePQD],
+    node_type: str='optimal',
 ) -> Tuple[bool, Optional[Node], int, int, Optional[Iterable[Node]], Optional[Iterable[Node]]]:
     """
     Implements the A* search algorithm.
@@ -573,7 +609,7 @@ def cfastar(
         - CLOSED set nodes.
     """
 
-    return astar(task_map, start_i, start_j, goal_i, goal_j, heuristics / cf, search_tree)
+    return astar(task_map, start_i, start_j, goal_i, goal_j, heuristics / cf, search_tree, node_type=node_type)
 
 def wastar(
     task_map: Map,
@@ -584,6 +620,7 @@ def wastar(
     heuristics: np.ndarray,
     w: float,
     search_tree: Type[SearchTreePQD],
+    node_type: str='optimal',
 ) -> Tuple[bool, Optional[Node], int, int, Optional[Iterable[Node]], Optional[Iterable[Node]]]:
     """
     Implements the A* search algorithm.
@@ -615,7 +652,7 @@ def wastar(
         - CLOSED set nodes.
     """
 
-    return astar(task_map, start_i, start_j, goal_i, goal_j, heuristics * np.full(shape=task_map.get_size(), fill_value=w), search_tree)
+    return astar(task_map, start_i, start_j, goal_i, goal_j, heuristics * np.full(shape=task_map.get_size(), fill_value=w), search_tree, node_type=node_type)
 
 def global_octile_distance(height: int, width: int, i_goal: int, j_goal: int) -> int:
     """
@@ -636,7 +673,7 @@ def global_octile_distance(height: int, width: int, i_goal: int, j_goal: int) ->
     coords = np.mgrid[0:height, 0:width]
     diff_i = np.abs(coords[0] - i_goal)
     diff_j = np.abs(coords[1] - j_goal)
-    return np.abs(diff_i - diff_j) + np.min(np.stack([diff_i, diff_j], axis=0), axis=0)
+    return np.abs(diff_i - diff_j) + np.min(np.stack([diff_i, diff_j], axis=0), axis=0) * 2 ** 0.5
 
 
 
@@ -648,6 +685,7 @@ def astar_func(
     goal_j: int,
     heuristic_func: Callable,
     search_tree: Type[SearchTreePQD],
+    node_type: str='optimal',
 ) -> Tuple[bool, Optional[Node], int, int, Optional[Iterable[Node]], Optional[Iterable[Node]]]:
     """
     Implements the A* search algorithm.
@@ -677,7 +715,7 @@ def astar_func(
         - CLOSED set nodes.
     """
 
-    return astar(task_map, start_i, start_j, goal_i, goal_j, heuristic_func(*task_map.get_size(), goal_i, goal_j), search_tree)
+    return astar(task_map, start_i, start_j, goal_i, goal_j, heuristic_func(*task_map.get_size(), goal_i, goal_j), search_tree, node_type=node_type)
 
 
 

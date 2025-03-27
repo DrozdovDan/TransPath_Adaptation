@@ -16,7 +16,7 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from model import TransPathModel, GridData
 
-from astar import wastar, cfastar, astar_func, Map, global_octile_distance, SearchTreePQD, make_path, draw_simple, Node
+from astar import wastar, cfastar, astar_func, Map, octile_distance, global_octile_distance, SearchTreePQD, make_path, draw_simple, Node
 import os
 
 def cfs_from_file(file_path: str):
@@ -42,7 +42,7 @@ def data_from_dir(dir_path: str, maps_filename: str='maps.npy', starts_filename:
         return cells_from_file(maps_path), starts_from_file(starts_path), goals_from_file(goals_path), cfs_from_file(cfs_path)
     return cells_from_file(maps_path), starts_from_file(starts_path), goals_from_file(goals_path), None
 
-def astar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, verbose: int=1):
+def astar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, node_type: str='optimal', verbose: int=1):
     assert cells.shape[0] == starts.shape[0] == goals.shape[0]
 
     metrics = {'index' : [], 'path_length' : [], 'expanded_nodes_num' : []}
@@ -52,11 +52,12 @@ def astar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray
         iterator = trange(cells.shape[0], desc='A* octile search')
     for i in iterator:
         grid = Map(cells[i, 0])
-        result = astar_func(grid, *starts[i], *goals[i], global_octile_distance, SearchTreePQD)
+        result = astar_func(grid, *starts[i], *goals[i], global_octile_distance, SearchTreePQD, node_type=node_type)
         if not result[0]:
             nonexistent_paths.append(i)
             if verbose > 1:
                 draw_simple(grid, *starts[i], *goals[i], None, result[-2], result[-1])
+                verbose -= 1
             continue
         path, length = make_path(result[1])
         metrics['index'].append(i)
@@ -64,6 +65,7 @@ def astar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray
         metrics['expanded_nodes_num'].append(len(result[-1]))
         if verbose > 1:
             draw_simple(grid, *starts[i], *goals[i], path, result[-2], result[-1])
+            verbose -= 1
     if verbose > 0:
         print(f'During the search was discovered {len(nonexistent_paths)} non-existent paths')
         if nonexistent_paths:
@@ -72,7 +74,7 @@ def astar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray
     
     return pd.DataFrame.from_dict(metrics)
 
-def wastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, w: float=2.0, verbose: int=1):
+def wastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, w: float=2.0, node_type: str='optimal', verbose: int=1):
     assert cells.shape[0] == starts.shape[0] == goals.shape[0]
 
     metrics = {'index' : [], 'path_length' : [], 'expanded_nodes_num' : []}
@@ -83,11 +85,12 @@ def wastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarra
     for i in iterator:
         grid = Map(cells[i, 0])
         heuristic = global_octile_distance(*grid.get_size(), *goals[i])
-        result = wastar(grid, *starts[i], *goals[i], heuristic, w, SearchTreePQD)
+        result = wastar(grid, *starts[i], *goals[i], heuristic, w, SearchTreePQD, node_type=node_type)
         if not result[0]:
             nonexistent_paths.append(i)
             if verbose > 1:
                 draw_simple(grid, *starts[i], *goals[i], None, result[-2], result[-1])
+                verbose -= 1
             continue
         path, length = make_path(result[1])
         metrics['index'].append(i)
@@ -95,6 +98,7 @@ def wastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarra
         metrics['expanded_nodes_num'].append(len(result[-1]))
         if verbose > 1:
             draw_simple(grid, *starts[i], *goals[i], path, result[-2], result[-1])
+            verbose -= 1
     if verbose > 0:
         print(f'During the search was discovered {len(nonexistent_paths)} non-existent paths')
         if nonexistent_paths:
@@ -103,7 +107,7 @@ def wastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarra
     
     return pd.DataFrame.from_dict(metrics)
 
-def cfastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, cfs: np.ndarray, verbose: int=1):
+def cfastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, cfs: np.ndarray, node_type: str='optimal', verbose: int=1):
     assert cells.shape[0] == starts.shape[0] == goals.shape[0]
 
     metrics = {'index' : [], 'path_length' : [], 'expanded_nodes_num' : []}
@@ -114,11 +118,12 @@ def cfastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarr
     for i in iterator:
         grid = Map(cells[i, 0])
         heuristic = global_octile_distance(*grid.get_size(), *goals[i])
-        result = cfastar(grid, *starts[i], *goals[i], heuristic, cfs[i, 0], SearchTreePQD)
+        result = cfastar(grid, *starts[i], *goals[i], heuristic, cfs[i, 0], SearchTreePQD, node_type=node_type)
         if not result[0]:
             nonexistent_paths.append(i)
             if verbose > 1:
                 draw_simple(grid, *starts[i], *goals[i], None, result[-2], result[-1])
+                verbose -= 1
             continue
         path, length = make_path(result[1])
         metrics['index'].append(i)
@@ -126,6 +131,7 @@ def cfastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarr
         metrics['expanded_nodes_num'].append(len(result[-1]))
         if verbose > 1:
             draw_simple(grid, *starts[i], *goals[i], path, result[-2], result[-1])
+            verbose -= 1
     if verbose > 0:
         print(f'During the search was discovered {len(nonexistent_paths)} non-existent paths')
         if nonexistent_paths:
@@ -164,7 +170,7 @@ class GridDataTest(Dataset):
                 torch.from_numpy(self.starts[idx].astype('float32')), 
                 torch.from_numpy(self.goals[idx].astype('float32')))
 
-def cfastar_octile_search_with_prediction(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, model: nn.Module, save_predictions_to: str=None, verbose: int=1):
+def cfastar_octile_search_with_prediction(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, model: nn.Module, save_predictions_to: str=None, node_type: str='optimal', verbose: int=1):
     dataset = GridDataTest(cells, starts, goals, img_h=cells.shape[-2], img_w=cells.shape[-1])
     dataloader = DataLoader(
         dataset, 
@@ -192,19 +198,23 @@ def cfastar_octile_search_with_prediction(cells: np.ndarray, starts: np.ndarray,
     if save_predictions_to:
         np.save(save_predictions_to, predictions)
     
-    return cfastar_octile_search(cells, starts, goals, predictions, verbose=verbose)
+    return cfastar_octile_search(cells, starts, goals, predictions, node_type=node_type, verbose=verbose)
 
-def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws: list[int]=None, cfs: np.ndarray=None, model: nn.Module=None, save_predictions_to: str=None, verbose: int=1):
+def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws: list[int]=None, cfs: np.ndarray=None, model: nn.Module=None, save_predictions_to: str=None, node_type: str='optimal', threshold: float=1.0, verbose: int=1):
     assert (cfs is not None) ^ (model is not None)
 
-    baseline = astar_octile_search(cells, starts, goals, verbose=verbose)
+    baseline_complexity = count_complexity(cells, starts, goals, node_type=node_type, verbose=verbose)
+
+    baseline = baseline_complexity[['index', 'path_length', 'expanded_nodes_num']][baseline_complexity['complexity'] >= threshold]
 
     model_df = None
     
     if model:
-        model_df = cfastar_octile_search_with_prediction(cells, starts, goals, model, save_predictions_to, verbose=verbose)
+        model_df = cfastar_octile_search_with_prediction(cells, starts, goals, model, save_predictions_to, node_type=node_type, verbose=verbose)
     else:
-        model_df = cfastar_octile_search(cells, starts, goals, cfs, verbose=verbose)
+        model_df = cfastar_octile_search(cells, starts, goals, cfs, node_type=node_type, verbose=verbose)
+    
+    model_df = model_df[baseline_complexity['complexity'] >= threshold]
 
     w_dfs = {}
 
@@ -213,7 +223,8 @@ def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws:
         if verbose > 0:
             iterator = tqdm(ws, desc='Computing WA* statistics')
         for w in iterator:
-            w_dfs[w] = wastar_octile_search(cells, starts, goals, w, verbose=verbose)
+            w_dfs[w] = wastar_octile_search(cells, starts, goals, w, node_type=node_type, verbose=verbose)
+            w_dfs[w] = w_dfs[w][baseline_complexity['complexity'] >= threshold]
 
     baseline_array = baseline[['path_length', 'expanded_nodes_num']].to_numpy()
     model_array = model_df[['path_length', 'expanded_nodes_num']].to_numpy()
@@ -233,7 +244,18 @@ def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws:
 
     return results
 
+def count_complexity(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, node_type: str='optimal', verbose: int=1):
+    df = astar_octile_search(cells, starts, goals, node_type=node_type, verbose=verbose)
+
+    iterator = df.iterrows()
+    if verbose > 0:
+        iterator = tqdm(df.iterrows(), desc='Count complexity')
+    df['complexity'] = np.zeros(shape=len(df))
+    for i, row in iterator:
+        idx = int(row['index'])
+        df['complexity'][i] = row['path_length'] / octile_distance(*starts[idx], *goals[idx])
     
+    return df
 
 
     
