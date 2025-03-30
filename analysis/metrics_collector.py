@@ -257,6 +257,27 @@ def count_complexity(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, n
     
     return df
 
+def get_metrics(results: dict, metrics: list=['Optimal found ratio', 'Length ratio', 'Expansions ratio']):
+    ret = {k: [] for k in results.keys()}
+    idxes = []
 
+    for metric in metrics:
+        if metric == 'Expansions ratio':
+            for k, df in results.items():
+                expansions = df['expanded_nodes_num']
+                ret[k].append(f'{np.round(np.mean(expansions) * 100, 2)}±{np.round(np.std(expansions) * 100, 2)}%')
+            idxes.append(metric)
+        elif metric == 'Length ratio':
+            for k, df in results.items():
+                length = df['path_length']
+                ret[k].append(f'{np.round(np.mean(length) * 100, 2)}±{np.round(np.std(length) * 100, 2)}%')
+            idxes.append(metric)
+        elif metric == 'Optimal found ratio':
+            for k, df in results.items():
+                length = df['path_length']
+                ret[k].append(f'{np.round(np.mean(np.isclose(length, 1.0)) * 100, 2)}%')
+            idxes.append(metric)
+
+    return pd.DataFrame(data=ret, index=idxes)
     
         
