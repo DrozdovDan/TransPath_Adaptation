@@ -253,6 +253,17 @@ class NodeAntiOptimal(Node):
             return self.g < other.g
         return self.f < other.f
     
+class ArticleNode(Node):
+    def __lt__(self, other):
+        """
+        Compares the keys (i.e., the f-values) of two nodes, needed for sorting/extracting the best element from OPEN.
+        """
+        return self.f < other.f or\
+            (self.f == other.f and (self.g < other.g or\
+                                        self.g == other.g and (self.i < other.i or\
+                                                               self.i == other.i and self.j < other.j)))
+
+    
 class SearchTreePQD:
     """
     SearchTree using a priority queue for OPEN and a dictionary for CLOSED.
@@ -542,6 +553,8 @@ def astar(
         LocalNode = NodeOptimal
     elif node_type == 'anti-optimal':
         LocalNode = NodeAntiOptimal
+    elif node_type == 'article':
+        LocalNode = ArticleNode
 
     ast = search_tree()
     steps = 0
