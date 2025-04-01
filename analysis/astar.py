@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw
 import pandas as pd
 from tqdm.auto import tqdm
 import math
-epsilon = 1e-9
+epsilon = 1e-5
 
 
 class Map:
@@ -231,8 +231,8 @@ class NodeOptimal(Node):
         """
         Compares the keys (i.e., the f-values) of two nodes, needed for sorting/extracting the best element from OPEN.
         """
-        if math.isclose(self.f, other.f):
-            if math.isclose(self.g, other.g):
+        if math.isclose(self.f, other.f, rel_tol=epsilon):
+            if math.isclose(self.g, other.g, rel_tol=epsilon):
                 if self.i == other.i:
                     return self.j < other.j
                 return self.i < other.i
@@ -245,15 +245,15 @@ class NodeAntiOptimal(Node):
         """
         Compares the keys (i.e., the f-values) of two nodes, needed for sorting/extracting the best element from OPEN.
         """
-        if math.isclose(self.f, other.f):
-            if math.isclose(self.g, other.g):
+        if math.isclose(self.f, other.f, rel_tol=epsilon):
+            if math.isclose(self.g, other.g, rel_tol=epsilon):
                 if self.i == other.i:
                     return self.j < other.j
                 return self.i < other.i
             return self.g < other.g
         return self.f < other.f
     
-class ArticleNode(Node):
+class NodeArticle(Node):
     def __lt__(self, other):
         """
         Compares the keys (i.e., the f-values) of two nodes, needed for sorting/extracting the best element from OPEN.
@@ -535,6 +535,8 @@ def astar(
         Heuristics for estimating the distance from a node to the goal.
     search_tree : Type[SearchTreePQD]
         The search tree to use.
+    node_type : str
+        The type of Nodes
 
     Returns
     -------
@@ -554,7 +556,7 @@ def astar(
     elif node_type == 'anti-optimal':
         LocalNode = NodeAntiOptimal
     elif node_type == 'article':
-        LocalNode = ArticleNode
+        LocalNode = NodeArticle
 
     ast = search_tree()
     steps = 0
