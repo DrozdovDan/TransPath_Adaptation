@@ -176,4 +176,6 @@ caves
 islands
 QRs
 testset
-testset.npy.zip
+testset.npy.zipresults/train/*.npy
+results/testset.npy
+results/zipped_train/*.npz

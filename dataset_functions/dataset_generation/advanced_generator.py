@@ -71,8 +71,6 @@ def chAnge(label, num_of_bad_generations):
             print(f"Я не справился с тем, чтобы сгенерировать {label}")
             exit(52)
         change = basic_generator(label, i * num_of_bad_generations)
-        # generate_BCD(np.array([generator() for _ in tqdm(range(num_of_bad_generations * i),
-        #                                 desc=f"regenerating {label}")]))
         bag_gen_indices = find_bad_gen_indices(change)
         # В таком случае не сможем заменить плохо сгенерированные изначально
         if len(bag_gen_indices) > num_of_bad_generations * (i - 1):

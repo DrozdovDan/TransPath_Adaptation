@@ -9,12 +9,36 @@ from dataset_functions.map_generators.cave_maps import generate_caves
 from dataset_functions.map_generators.island_maps import generate_islands
 
 
+from dataset_functions.map_generators.masked_pyramid_maps import generate_masked_pyramid
+from dataset_functions.map_generators.maze_maps import generate_maze
+from dataset_functions.map_generators.Perlin_noise_maps import generate_Perlin_noise
+from dataset_functions.map_generators.random_line_maps import generate_random_lines
+from dataset_functions.map_generators.recursive_division_maps import generate_recursive_division
+from dataset_functions.map_generators.rotational_symmery_maps import generate_rotational_symmetry
+from dataset_functions.map_generators.house_expo_maps import generate_house_expo
+from dataset_functions.map_generators.moving_street_maps import generate_moving_street
+from dataset_functions.map_generators.baldurs_gate_maps import generate_baldurs_gate
+from dataset_functions.map_generators.dcaffo_maps import generate_dcaffo_maps
+from dataset_functions.map_generators.tmp_maps import generate_tmp
+
 label_to_generator = {
-    "bands": generate_bands,
-    "QRs": generate_QRs,
-    "bug_traps": generate_noisy_bug_traps,
-    "islands": generate_islands,
-    "caves": generate_caves
+    ## AlekSet:
+    # "bands": generate_bands,
+    # "QRs": generate_QRs,
+    # "bug_traps": generate_noisy_bug_traps,
+    # "islands": generate_islands,
+    # "caves": generate_caves,
+    ## TestSet:
+    "maze": generate_maze,
+    "pyramid": generate_masked_pyramid,
+    "Perlin_noise": generate_Perlin_noise,
+    "recursive_division": generate_recursive_division,
+    "rotational_symmery_maps": generate_rotational_symmetry,
+    "dcaffo_maps": generate_dcaffo_maps,
+    "house_expo_maps": generate_house_expo,
+    "moving_street_maps": generate_moving_street,
+    "baldurs_gate_maps": generate_baldurs_gate,
+    "tmp_maps": generate_tmp
     }
 
 

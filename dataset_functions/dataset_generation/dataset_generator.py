@@ -24,16 +24,17 @@ def generate_hard_map_by_label(label, N):
 def generate_dataset(N):
     res = np.empty((N, 64, 64, 4), dtype=np.float32)
     current_index = 0
+    q = len(label_to_generator)
     for label in label_to_generator.keys():
-        if label in ["bands", "bug_traps", "QRs"]:
-            res[current_index:current_index + N//4] = generate_hard_map_by_label(label, N // 4)
-            current_index += N//4
+        # if label in ["bands", "bug_traps", "QRs"]:
+        res[current_index:current_index + N//q] = generate_hard_map_by_label(label, N // q)
+        current_index += N//q
 
-        elif label in ["islands", "caves"]:
-            res[current_index:current_index + N//8] = generate_hard_map_by_label(label, N // 8)
-            current_index += N//8
-        else:
-            print("WTF?!")
+        # elif label in ["islands", "caves"]:
+        #     res[current_index:current_index + N//8] = generate_hard_map_by_label(label, N // 8)
+        #     current_index += N//8
+        # else:
+        #     print("WTF?!")
     return res
 
 def generate_dataset_by_label(label, N):
