@@ -81,7 +81,7 @@ def wastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarra
     nonexistent_paths = []
     iterator = range(cells.shape[0])
     if verbose > 0:
-        iterator = trange(cells.shape[0], desc='WA* octile search')
+        iterator = trange(cells.shape[0], desc=f'WA* (w={w}) octile search')
     for i in iterator:
         grid = Map(cells[i, 0])
         heuristic = global_octile_distance(*grid.get_size(), *goals[i])
@@ -253,7 +253,7 @@ def count_complexity(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, n
     df['complexity'] = np.zeros(shape=len(df))
     for i, row in iterator:
         idx = int(row['index'])
-        df['complexity'][i] = row['path_length'] / octile_distance(*starts[idx], *goals[idx])
+        df.loc[i, 'complexity'] = row['path_length'] / octile_distance(*starts[idx], *goals[idx])
     
     return df
 
@@ -279,5 +279,23 @@ def get_metrics(results: dict, metrics: list=['Optimal found ratio', 'Length rat
             idxes.append(metric)
 
     return pd.DataFrame(data=ret, index=idxes)
-    
+
+def get_splitted_metrics(dir_path: str, model: nn.Module, ws: list[int]=None, split_to: int=10, node_type: str='optimal', threshold: float=1.0, metrics: list=['Optimal found ratio', 'Length ratio', 'Expansions ratio'], verbose: int=0):
+    assert split_to > 0 and isinstance(split_to, int), 'split_to should be a positive int value'
+    cells, starts, goals, _ = data_from_dir(dir_path)
+    batch_size = len(cells) // split_to
+    dfs = []
+    for lower_bound_index in range(0, len(cells), batch_size):
+        upper_bound_index = min(len(cells), lower_bound_index + batch_size)
+        results = contain_ratios(cells[lower_bound_index:upper_bound_index], 
+                                 starts[lower_bound_index:upper_bound_index],
+                                 goals[lower_bound_index:upper_bound_index],
+                                 ws,
+                                 model=model,
+                                 node_type=node_type,
+                                 threshold=threshold,
+                                 verbose=verbose)
+        df = get_metrics(results, metrics=metrics)
+        dfs.append(df)
+    return dfs
         
