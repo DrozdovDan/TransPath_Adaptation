@@ -1,0 +1,16 @@
+mode: cf
+dataset: test
+batch_size: 512
+max_epochs: 50
+learning_rate: 0.0004
+weight_decay: 0.0
+limit_train_batches: null
+limit_val_batches: null
+proj_name: fastTest
+run_name: bs=512_ep=50_lr=0.0004_ff=ff
+accelerator: cuda
+devices: [1]
+checkpoints_dir: ./checkpoints/
+weights_dir: ./weights/
+continue_learning: False
+checkpoint: ""
