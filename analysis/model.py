@@ -197,6 +197,49 @@ class FeedForward(nn.Module):
         x = self.dropout(x)
         x = self.linear2(x)
         return x
+    
+class MoE(nn.Module):
+    def __init__(self, embed_dim, expert_dim, num_experts=4, top_k=2, dropout=0.2):
+        super().__init__()
+        self.num_experts = num_experts
+        self.top_k = top_k
+        self.w_gating = nn.Linear(embed_dim, num_experts)
+        self.experts = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(embed_dim, expert_dim),
+                nn.GELU(),
+                nn.Linear(expert_dim, embed_dim),
+                nn.Dropout(dropout)
+            ) for _ in range(num_experts)
+        ])
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [B, N, D]
+        B, N, D = x.shape
+        # Compute gating logits and select top-k experts
+        gating_logits = self.w_gating(x)                # [B, N, E]
+        topk_vals, topk_idx = torch.topk(gating_logits, self.top_k, dim=-1)  # [B, N, K]
+        gate_scores = F.softmax(topk_vals, dim=-1)                         # [B, N, K]
+
+        # Compute each expert output on entire token set
+        # Flatten tokens for expert input: [B*N, D]
+        x_flat = x.view(-1, D)
+        # Run each expert and reshape to [B, N, D]
+        expert_outs = []
+        for expert in self.experts:
+            out = expert(x_flat)                    # [B*N, D]
+            expert_outs.append(out.view(B, N, D))
+        # Stack to [B, N, E, D]
+        all_out = torch.stack(expert_outs, dim=2)    # [B, N, E, D]
+
+        # Gather top-k expert outputs
+        idx_expanded = topk_idx.unsqueeze(-1).expand(-1, -1, -1, D)  # [B, N, K, D]
+        selected = torch.gather(all_out, 2, idx_expanded)            # [B, N, K, D]
+
+        # Weight and sum
+        gate_scores = gate_scores.unsqueeze(-1)      # [B, N, K, 1]
+        y = (selected * gate_scores).sum(dim=2)      # [B, N, D]
+        return y
 
 class BasicTransformerBlock(nn.Module):
     def __init__(self, embed_dim, num_heads, dropout=0.3, context_dim=None):

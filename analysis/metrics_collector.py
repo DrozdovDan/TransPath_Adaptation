@@ -10,11 +10,12 @@ import numpy as np
 import numpy.typing as npt
 from PIL import Image, ImageDraw
 import pandas as pd
-from tqdm.auto import tqdm ,trange
+from tqdm.auto import tqdm, trange
 import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from model import TransPathModel, GridData
+from evit_unet import Eff_Unet
 
 from astar import wastar, cfastar, astar_func, Map, octile_distance, global_octile_distance, SearchTreePQD, make_path, draw_simple, Node
 import os
@@ -140,9 +141,9 @@ def cfastar_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarr
     
     return pd.DataFrame.from_dict(metrics)
 
-def create_TransPath_model(model_name=TransPathModel, weights_path: str=None, device: str='cpu'):
+def create_TransPath_model(model_name=TransPathModel, weights_path: str=None, device: str='cpu', **kwargs):
     torch_device = torch.device(device)
-    model = model_name()
+    model = model_name(**kwargs)
     if weights_path:
         model.load_state_dict(torch.load(weights_path, weights_only=True))
     model.to(torch_device)
@@ -176,7 +177,7 @@ def cfastar_octile_search_with_prediction(cells: np.ndarray, starts: np.ndarray,
         dataset, 
         batch_size=1,
         shuffle=False, 
-        pin_memory=True,
+        pin_memory=False,
         drop_last=False
     )
     iterator = dataloader
@@ -200,14 +201,18 @@ def cfastar_octile_search_with_prediction(cells: np.ndarray, starts: np.ndarray,
     
     return cfastar_octile_search(cells, starts, goals, predictions, node_type=node_type, verbose=verbose)
 
-def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws: list[int]=None, cfs: np.ndarray=None, model: nn.Module=None, save_predictions_to: str=None, node_type: str='optimal', threshold: float=1.0, verbose: int=1):
+def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws: list[int]=None, cfs: np.ndarray=None, model: nn.Module=None, save_predictions_to: str=None, baseline: pd.DataFrame=None, save_baseline_to: str=None, node_type: str='optimal', threshold: float=1.0, verbose: int=1):
     assert (cfs is not None) ^ (model is not None)
 
-    baseline_complexity = count_complexity(cells, starts, goals, node_type=node_type, verbose=verbose)
-
-    baseline = baseline_complexity[['index', 'path_length', 'expanded_nodes_num']][baseline_complexity['complexity'] >= threshold]
-
+    if baseline is None:
+        baseline_complexity = count_complexity(cells, starts, goals, node_type=node_type, verbose=verbose)
+        baseline = baseline_complexity[['index', 'path_length', 'expanded_nodes_num']][baseline_complexity['complexity'] >= threshold]
+    else:
+        assert 'index' in baseline.keys() and 'path_length' in baseline.keys() and 'expanded_nodes_num' in baseline.keys()
     model_df = None
+
+    if save_predictions_to is not None:
+        baseline.to_csv(save_predictions_to, index=False)
     
     if model:
         model_df = cfastar_octile_search_with_prediction(cells, starts, goals, model, save_predictions_to, node_type=node_type, verbose=verbose)
