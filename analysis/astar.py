@@ -669,9 +669,9 @@ def wastar(
 
     return astar(task_map, start_i, start_j, goal_i, goal_j, heuristics * np.full(shape=task_map.get_size(), fill_value=w), search_tree, node_type=node_type)
 
-def global_octile_distance(height: int, width: int, i_goal: int, j_goal: int) -> int:
+def global_octile_distance(height: int, width: int, i_goal: int, j_goal: int) -> np.ndarray:
     """
-    Computes the Manhattan distance between two cells on a grid.
+    Computes the octile distance between all cells and goal on a grid.
 
     Parameters
     ----------
@@ -682,7 +682,7 @@ def global_octile_distance(height: int, width: int, i_goal: int, j_goal: int) ->
 
     Returns
     -------
-    int
+    np.ndarray
        Octile distance between all cells and goal cell.
     """
     coords = np.mgrid[0:height, 0:width]
@@ -690,7 +690,26 @@ def global_octile_distance(height: int, width: int, i_goal: int, j_goal: int) ->
     diff_j = np.abs(coords[1] - j_goal)
     return np.abs(diff_i - diff_j) + np.min(np.stack([diff_i, diff_j], axis=0), axis=0) * 2 ** 0.5
 
+def multi_global_octile_distance(height: int, width: int, goals: np.ndarray) -> np.ndarray:
+    """
+    Computes the octile distance between all cells and goal on a grid.
 
+    Parameters
+    ----------
+    height, width : int
+        (height, width) shape of the grid.
+    goals: np.ndarray
+        [(i, j)] coordinates of the goal cells on the grids.
+
+    Returns
+    -------
+    np.ndarray
+       Octile distance between all cells and all goal cells.
+    """
+    coords = np.mgrid[0:height, 0:width]
+    diff_i = np.abs(coords[0] - goals[:, 0][:, None, None])
+    diff_j = np.abs(coords[1] - goals[:, 1][:, None, None])
+    return np.abs(diff_i - diff_j) + np.min(np.stack([diff_i, diff_j], axis=0), axis=0) * 2 ** 0.5
 
 def astar_func(
     task_map: Map,
