@@ -1,6 +1,6 @@
 import numpy as np
 from tqdm import tqdm
-from dataset_functions.dijkstra.backwards_dijkstra import dijkstra_single_map
+from dijkstra.backwards_dijkstra import dijkstra_single_map
 
 
 def create_tensor_B(A):

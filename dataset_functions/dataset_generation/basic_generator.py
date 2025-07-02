@@ -20,6 +20,8 @@ from dataset_functions.map_generators.moving_street_maps import generate_moving_
 from dataset_functions.map_generators.baldurs_gate_maps import generate_baldurs_gate
 from dataset_functions.map_generators.dcaffo_maps import generate_dcaffo_maps
 from dataset_functions.map_generators.tmp_maps import generate_tmp
+from dataset_functions.map_generators.dumbQR_maps import generate_dumbQRs
+from dataset_functions.map_generators.figures import generate_figures
 
 label_to_generator = {
     ## AlekSet:
@@ -29,16 +31,21 @@ label_to_generator = {
     # "islands": generate_islands,
     # "caves": generate_caves,
     ## TestSet:
-    "maze": generate_maze,
-    "pyramid": generate_masked_pyramid,
-    "Perlin_noise": generate_Perlin_noise,
-    "recursive_division": generate_recursive_division,
-    "rotational_symmery_maps": generate_rotational_symmetry,
-    "dcaffo_maps": generate_dcaffo_maps,
-    "house_expo_maps": generate_house_expo,
-    "moving_street_maps": generate_moving_street,
-    "baldurs_gate_maps": generate_baldurs_gate,
-    "tmp_maps": generate_tmp
+    # "maze": generate_maze,
+    # "pyramid": generate_masked_pyramid,
+    # "Perlin_noise": generate_Perlin_noise,
+    # "recursive_division": generate_recursive_division,
+    # "rotational_symmery_maps": generate_rotational_symmetry,
+    # "dcaffo_maps": generate_dcaffo_maps,
+    # "house_expo_maps": generate_house_expo,
+    # "moving_street_maps": generate_moving_street,
+    # "baldurs_gate_maps": generate_baldurs_gate,
+    # "tmp_maps": generate_tmp,
+    ## dumbTrainSet:
+    # "dumbQRs": generate_dumbQRs,
+    ## figures:
+    "figures":  generate_figures
+
     }
 
 
