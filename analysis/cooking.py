@@ -4,6 +4,7 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import time
 import torch
 import yaml
+import sys
 from torch import nn
 import torch.nn.functional as F
 from torch import Tensor
@@ -18,8 +19,7 @@ from typing import Any
 import wandb
 import multiprocessing
 import matplotlib.pyplot as plt
-from einops import rearrange
-
+from lightning.pytorch.callbacks import LearningRateMonitor
 
 # ResNet Block
 class ResNetBlock(nn.Module):
@@ -358,7 +358,7 @@ class TransPathModel(nn.Module):
 
 # Training Module
 class TransPathLit(L.LightningModule):
-    def __init__(self, model: nn.Module, mode: str='f', learning_rate: float=1e-4, weight_decay: float=0.0) -> None:
+    def __init__(self, model: nn.Module, mode: str='f', learning_rate: float=1e-4, weight_decay: float=0.0, flag_OneCycle = True) -> None:
         super().__init__()
         self.save_hyperparameters()
         
@@ -369,6 +369,7 @@ class TransPathLit(L.LightningModule):
         
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
+        self.flag_OneCycle = flag_OneCycle
 
     def training_step(
         self, batch: tuple[Tensor, Tensor, Tensor, Tensor], batch_idx: int
@@ -376,7 +377,7 @@ class TransPathLit(L.LightningModule):
         map_design, start, goal, gt_hmap = batch
         inputs = torch.cat([map_design, start + goal], dim=1) if self.mode in ('f', 'nastar') else torch.cat([map_design, goal], dim=1)
         predictions = self.model(inputs)
-        loss = self.loss((predictions + 1) / 2 * self.k, gt_hmap)
+        loss = self.loss((predictions + 1) / 2 * self.k * (1 - map_design - goal) + goal, gt_hmap)
         self.log(f'train_loss', loss, on_step=False, on_epoch=True)
         return loss
 
@@ -386,18 +387,29 @@ class TransPathLit(L.LightningModule):
         map_design, start, goal, gt_hmap = batch
         inputs = torch.cat([map_design, start + goal], dim=1) if self.mode in ('f', 'nastar') else torch.cat([map_design, goal], dim=1)
         predictions = self.model(inputs)
-        loss = self.loss((predictions + 1) / 2 * self.k, gt_hmap)
+        loss = self.loss((predictions + 1) / 2 * self.k * (1 - map_design - goal) + goal, gt_hmap)
         self.log(f'val_loss', loss, on_step=False, on_epoch=True)
         return loss
 
     def configure_optimizers(self) -> dict[str, Any]:
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer, max_lr=self.learning_rate, total_steps=self.trainer.estimated_stepping_batches
-        )
+        if self.flag_OneCycle:
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                optimizer, max_lr=self.learning_rate, total_steps=self.trainer.estimated_stepping_batches
+            )
+        else:
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',           # 'min' для loss, 'max' для accuracy
+                factor=0.5,           # во сколько раз уменьшать LR
+                patience=2,          # сколько эпох ждать без улучшений
+                verbose=True,         # выводить сообщения об изменении LR
+                min_lr=1e-10          # минимальный LR
+                )
         return {
             "optimizer": optimizer,
-            "lr_scheduler": scheduler
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "monitor": "val_loss"  # обязательно нужно указать метрику
+            }
         }
 
 
@@ -466,7 +478,7 @@ def load_config(config_path):
 
 # Configuration
 if __name__ == "__main__":
-    config = load_config("config.yaml")  # или sys.argv[1] для указания при запуске
+    config = load_config(sys.argv[1])  # или sys.argv[1] для указания при запуске
     mode                = config["mode"]
     dataset             = config["dataset"]
     batch_size          = config["batch_size"]
@@ -476,13 +488,14 @@ if __name__ == "__main__":
     limit_train_batches = config["limit_train_batches"]
     limit_val_batches   = config["limit_val_batches"]
     proj_name           = config["proj_name"]
-    run_name            = config["run_name"]
+    flag                = config["flag"]
+    run_name            = f"ds={dataset}, bs={batch_size}, ep={max_epochs}, lr={learning_rate}, OneCycle={flag}"
     accelerator         = config["accelerator"]
     devices             = config["devices"]
     checkpoints_dir     = config.get("checkpoints_dir")
     weights_dir         = config["weights_dir"]
-    continue_learning: bool   = config["continue_learning"]
     checkpoint          = config["checkpoint"]
+    continue_learning: bool   = config["continue_learning"]
 
     torch.set_default_device(torch.device(f"cuda:{devices[-1]}"))
 
@@ -512,13 +525,32 @@ if __name__ == "__main__":
     samples = next(iter(val_dataloader))
 
     # Initialize model and trainer
-    date = time.strftime("%d%m%Y")
+    date = time.strftime("%d%m%Y_%H%M%S")
     callback = PathLogger(samples, mode=mode, num_samples=10)
     checkpoints = ModelCheckpoint(dirpath=checkpoints_dir, 
-                                  filename=f'{mode}-ep{{epoch}}-{date}', 
-                                  every_n_epochs=10, 
-                                  auto_insert_metric_name=False)
+                                  filename=f'{run_name}-ep{{epoch}}-{{val_loss:.5f}}-date:{date}', 
+                                  every_n_epochs=1, 
+                                  auto_insert_metric_name=False,
+                                  monitor="val_loss",
+                                  mode="min",
+                                  save_top_k=5, 
+                                  save_weights_only=False, 
+                                  verbose=True,
+                                  )
     wandb_logger = WandbLogger(project=proj_name, name=f'{run_name}_{mode}', log_model='all')
+
+    # checkpoints = ModelCheckpoint(
+    #     dirpath="best_weights",             # куда сохранять
+    #     filename=f"{run_name}best-{{epoch:02d}}-{{val_acc:.4f}}",  # имя файла
+    #     monitor="val_acc",                 # по какой метрике следить
+    #     mode="max",                        # метрику надо максимизировать
+    #     save_top_k=3,                      # сохраняем только лучший
+    #     save_weights_only=False,          # сохраняем весь LightningModule
+    #     verbose=True,
+    #     auto_insert_metric_name = False
+    # )
+
+
 
     # Initialize model
     model = TransPathModel()
@@ -527,8 +559,11 @@ if __name__ == "__main__":
         model=model,
         mode=mode,
         learning_rate=learning_rate,
-        weight_decay=weight_decay
+        weight_decay=weight_decay, 
+        flag_OneCycle=flag
     )
+
+    lr_monitor = LearningRateMonitor(logging_interval="epoch")   # или "step"
 
     trainer = L.Trainer(
         logger=wandb_logger,
@@ -538,7 +573,7 @@ if __name__ == "__main__":
         deterministic=False,
         limit_train_batches=limit_train_batches,
         limit_val_batches=limit_val_batches,
-        callbacks=[checkpoints, callback],
+        callbacks=[checkpoints, callback, lr_monitor],
     )
 
 
@@ -549,5 +584,6 @@ if __name__ == "__main__":
     
     # Save model weights
     model_name = f'{proj_name}_{run_name}'
-    torch.save(model.state_dict(), os.path.join(weights_dir, model_name))
+    weights_path = os.path.join(weights_dir, model_name + ".ckpt")
+    trainer.save_checkpoint(weights_path)
     print(f"Model saved as {os.path.join(weights_dir, model_name)}")
