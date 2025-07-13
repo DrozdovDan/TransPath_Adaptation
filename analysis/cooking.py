@@ -92,7 +92,7 @@ class Downsample(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, in_channels, hidden_channels, downsample_steps, dropout=0.1):
+    def __init__(self, in_channels, hidden_channels, downsample_steps, dropout=0.1, skip=False):
         super().__init__()
         self.layers = nn.ModuleList([
             nn.Conv2d(
@@ -110,11 +110,15 @@ class Encoder(nn.Module):
                     Downsample(hidden_channels)
                 )
             )
+        self.skip = skip
 
     def forward(self, x):
+        skip_conns = []
         for layer in self.layers:
             x = layer(x)
-        return x
+            if self.skip:
+                skip_conns.append(x)
+        return x, skip_conns
 
 
 # Decoder components
@@ -130,7 +134,7 @@ class Upsample(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, hidden_channels, out_channels, upsample_steps, dropout=0.1):
+    def __init__(self, hidden_channels, out_channels, upsample_steps, dropout=0.1, skip=False):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(upsample_steps):
@@ -149,10 +153,15 @@ class Decoder(nn.Module):
             stride=1,
             padding=1
         )
+        self.skip = skip
 
-    def forward(self, x):
-        for layer in self.layers:
+    def forward(self, x, skip_conns):
+        if self.skip:
+            x += skip_conns[-1]
+        for i, layer in enumerate(self.layers):
             x = layer(x)
+            if self.skip:
+                x += skip_conns[-i - 2]
         x = self.norm(x)
         x = self.silu(x)
         x = self.conv_out(x)
@@ -323,11 +332,12 @@ class TransPathModel(nn.Module):
                 cnn_dropout=0.15,
                 attn_dropout=0.15,
                 downsample_steps=3, 
+                skip=False,
                 resolution=(64, 64)):
         super().__init__()
         
-        self.encoder = Encoder(in_channels, hidden_channels, downsample_steps, cnn_dropout)
-        self.decoder = Decoder(hidden_channels, out_channels, downsample_steps, cnn_dropout)
+        self.encoder = Encoder(in_channels, hidden_channels, downsample_steps, cnn_dropout, skip)
+        self.decoder = Decoder(hidden_channels, out_channels, downsample_steps, cnn_dropout, skip)
         
         self.encoder_pos = PosEmbeds(
             hidden_channels, 
@@ -348,13 +358,19 @@ class TransPathModel(nn.Module):
 
 
     def forward(self, x):
-        x = self.encoder(x)
+        x, skip_conns = self.encoder(x)
         x = self.encoder_pos(x)
         x = self.transformer(x)
         x = self.decoder_pos(x)
-        x = self.decoder(x)
+        x = self.decoder(x, skip_conns)
         return x
 
+def maskedMSELoss(prediction, target, mask):
+    N = torch.sum(mask)
+    if N == 0:
+        return torch.sum((prediction - target) ** 2) * 0.0
+    loss = torch.sum((prediction - target) ** 2) / N
+    return loss
 
 # Training Module
 class TransPathLit(L.LightningModule):
@@ -364,7 +380,7 @@ class TransPathLit(L.LightningModule):
         
         self.model = model
         self.mode = mode
-        self.loss = nn.L1Loss() if mode == 'h' else nn.MSELoss()
+        self.loss = nn.L1Loss() if mode == 'h' else maskedMSELoss
         self.k = 64*64 if mode == 'h' else 1
         
         self.learning_rate = learning_rate
@@ -377,7 +393,7 @@ class TransPathLit(L.LightningModule):
         map_design, start, goal, gt_hmap = batch
         inputs = torch.cat([map_design, start + goal], dim=1) if self.mode in ('f', 'nastar') else torch.cat([map_design, goal], dim=1)
         predictions = self.model(inputs)
-        loss = self.loss((predictions + 1) / 2 * self.k * (1 - map_design - goal) + goal, gt_hmap)
+        loss = self.loss((predictions + 1) / 2 * self.k * (1 - map_design - goal) + goal, gt_hmap, 1 - map_design - goal)
         self.log(f'train_loss', loss, on_step=False, on_epoch=True)
         return loss
 
@@ -387,7 +403,7 @@ class TransPathLit(L.LightningModule):
         map_design, start, goal, gt_hmap = batch
         inputs = torch.cat([map_design, start + goal], dim=1) if self.mode in ('f', 'nastar') else torch.cat([map_design, goal], dim=1)
         predictions = self.model(inputs)
-        loss = self.loss((predictions + 1) / 2 * self.k * (1 - map_design - goal) + goal, gt_hmap)
+        loss = self.loss((predictions + 1) / 2 * self.k * (1 - map_design - goal) + goal, gt_hmap, 1 - map_design - goal)
         self.log(f'val_loss', loss, on_step=False, on_epoch=True)
         return loss
 
@@ -496,13 +512,15 @@ if __name__ == "__main__":
     weights_dir         = config["weights_dir"]
     checkpoint          = config["checkpoint"]
     continue_learning: bool   = config["continue_learning"]
+    img_size: int         = config["img_size"]
+    skip: bool              = config["skip"]
 
     torch.set_default_device(torch.device(f"cuda:{devices[-1]}"))
 
     # Load datasets
-    dataset_dir = f'datasets/{dataset}'
-    train_data = GridData(path=f"{dataset_dir}/train", mode=mode)
-    val_data = GridData(path=f"{dataset_dir}/val", mode=mode)
+    dataset_dir = f'{dataset}'
+    train_data = GridData(path=f"{dataset_dir}/train", mode=mode, img_size=img_size)
+    val_data = GridData(path=f"{dataset_dir}/val", mode=mode, img_size=img_size)
     resolution = (train_data.img_size, train_data.img_size)
 
     # Create dataloaders
@@ -511,7 +529,7 @@ if __name__ == "__main__":
         train_data, 
         batch_size=batch_size,
         shuffle=True, 
-        # num_workers=multiprocessing.cpu_count(),  # Uncomment if not in jupyter
+        num_workers=5,  # Uncomment if not in jupyter
         pin_memory=True,
         generator=torch.Generator(device=f'cuda:{devices[-1]}'),
     )
@@ -519,7 +537,7 @@ if __name__ == "__main__":
         val_data, 
         batch_size=batch_size,
         shuffle=False, 
-        # num_workers=multiprocessing.cpu_count(),  # Uncomment if not in jupyter
+        num_workers=5,  # Uncomment if not in jupyter
         pin_memory=True
     )
     samples = next(iter(val_dataloader))
@@ -553,7 +571,7 @@ if __name__ == "__main__":
 
 
     # Initialize model
-    model = TransPathModel()
+    model = TransPathModel(resolution=resolution, skip=skip)
 
     lit_module = TransPathLit(
         model=model,
