@@ -78,7 +78,7 @@ class Map:
         bool
             True if the cell is traversable, False if it's blocked.
         """
-        return not self._cells[i, j]
+        return self.in_bounds(i, j) and not self._cells[i, j]
 
     def get_neighbors(self, i: int, j: int) -> List[Tuple[int, int]]:
         """
@@ -101,7 +101,7 @@ class Map:
         delta = ((0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, 1), (-1, -1), (1, -1))
         for dx, dy in delta:
             ni, nj = i + dx, j + dy
-            if self.in_bounds(ni, nj) and self.traversable(ni, nj):
+            if self.traversable(ni, nj):
                 neighbors.append((ni, nj))
         return neighbors
 
@@ -147,7 +147,7 @@ def compute_cost(i1: int, j1: int, i2: int, j2: int) -> Union[int, float]:
     elif abs(i1 - i2) == 1 and abs(j1 - j2) == 1:
         return 2 ** 0.5
     else:
-        raise ValueError("Trying to compute the cost of a non-supported move!")
+        return ((i1 - i2) ** 2 + (j1 - j2) ** 2) ** 0.5
     
 
 class Node:
@@ -750,6 +750,159 @@ def astar_func(
     """
 
     return astar(task_map, start_i, start_j, goal_i, goal_j, heuristic_func(*task_map.get_size(), goal_i, goal_j), search_tree, node_type=node_type)
+
+def jump(
+    task_map: Map,
+    curr_i: int,
+    curr_j: int,
+    parent_i: int,
+    parent_j: int,
+    goal_i: int,
+    goal_j: int,
+) -> Optional[Tuple[int, int]]:
+    
+    if not task_map.traversable(curr_i, curr_j):
+        return None
+    
+    if curr_i == goal_i and curr_j == goal_j:
+        return (curr_i, curr_j)
+    
+    di, dj = curr_i - parent_i, curr_j - parent_j
+
+    if di != 0 and dj != 0:
+        if (task_map.traversable(curr_i - di, curr_j + dj) and not task_map.traversable(curr_i - di, curr_j)) or \
+            (task_map.traversable(curr_i + di, curr_j - dj) and not task_map.traversable(curr_i, curr_j - dj)):
+            return (curr_i, curr_j)
+    else:
+        if di != 0:
+            if (task_map.traversable(curr_i + di, curr_j + 1) and not task_map.traversable(curr_i, curr_j + 1)) or \
+                (task_map.traversable(curr_i + di, curr_j - 1) and not task_map.traversable(curr_i, curr_j - 1)):
+                return (curr_i, curr_j)
+        else:
+            if (task_map.traversable(curr_i + 1, curr_j + dj) and not task_map.traversable(curr_i + 1, curr_j)) or \
+                (task_map.traversable(curr_i - 1, curr_j + dj) and not task_map.traversable(curr_i - 1, curr_j)):
+                return (curr_i, curr_j)
+            
+    if di != 0 and dj != 0:
+        if jump(task_map, curr_i + di, curr_j, curr_i, curr_j, goal_i, goal_j) or jump(task_map, curr_i, curr_j + dj, curr_i, curr_j, goal_i, goal_j):
+            return (curr_i, curr_j)
+    
+    return jump(task_map, curr_i + di, curr_j + dj, curr_i, curr_j, goal_i, goal_j)
+
+def jump_point_search(
+    task_map: Map,
+    start_i: int,
+    start_j: int,
+    goal_i: int,
+    goal_j: int,
+    heuristics: np.ndarray,
+    search_tree: Type[SearchTreePQD],
+    node_type: str='optimal',
+) -> Tuple[bool, Optional[Node], int, int, Optional[Iterable[Node]], Optional[Iterable[Node]]]:
+    """
+    Implements the jump point search algorithm.
+
+    Parameters
+    ----------
+    task_map : Map
+        The grid or map being searched.
+    start_i, start_j : int, int
+        Starting coordinates.
+    goal_i, goal_j : int, int
+        Goal coordinates.
+    heuristics : np.ndarray
+        Heuristics for estimating the distance from a node to the goal.
+    search_tree : Type[SearchTreePQD]
+        The search tree to use.
+    node_type : str
+        The type of Nodes
+
+    Returns
+    -------
+    Tuple[bool, Optional[Node], int, int, Optional[Iterable[Node]], Optional[Iterable[Node]]]
+        Tuple containing:
+        - A boolean indicating if a path was found.
+        - The last node in the found path or None.
+        - Number of algorithm iterations.
+        - Size of the resultant search tree.
+        - OPEN set nodes for visualization or None.
+        - CLOSED set nodes.
+    """
+    LocalNode = Node
+
+    if node_type == 'optimal':
+        LocalNode = NodeOptimal
+    elif node_type == 'anti-optimal':
+        LocalNode = NodeAntiOptimal
+    elif node_type == 'article':
+        LocalNode = NodeArticle
+
+    ast = search_tree()
+    steps = 0
+
+    start_node = LocalNode(start_i, start_j, g=0, h=heuristics[start_i, start_j])
+    ast.add_to_open(start_node)
+
+    goal_node = LocalNode(goal_i, goal_j)
+
+    while not ast.open_is_empty():
+        steps += 1
+        best = ast.get_best_node_from_open()
+        if not best:
+            break
+        if goal_node == best:
+            return True, best, steps, len(ast), ast.opened, ast.expanded
+        neighbours = task_map.get_neighbors(best.i, best.j)
+        for neighbour in neighbours:
+            jp = jump(task_map, *neighbour, best.i, best.j, goal_i, goal_j)
+            if jp is None:
+                continue
+            cur_node = LocalNode(jp[0], jp[1], g=(best.g + compute_cost(best.i, best.j, jp[0], jp[1])), h=heuristics[jp[0], jp[1]], parent=best)
+            if not ast.was_expanded(cur_node):
+                ast.add_to_open(cur_node)
+        ast.add_to_closed(best)
+
+    return False, None, steps, len(ast), None, ast.expanded
+
+def jps_func(
+    task_map: Map,
+    start_i: int,
+    start_j: int,
+    goal_i: int,
+    goal_j: int,
+    heuristic_func: Callable,
+    search_tree: Type[SearchTreePQD],
+    node_type: str='optimal',
+) -> Tuple[bool, Optional[Node], int, int, Optional[Iterable[Node]], Optional[Iterable[Node]]]:
+    """
+    Implements the jump point search algorithm.
+
+    Parameters
+    ----------
+    task_map : Map
+        The grid or map being searched.
+    start_i, start_j : int, int
+        Starting coordinates.
+    goal_i, goal_j : int, int
+        Goal coordinates.
+    heuristic_func : Callable
+        Heuristic function for estimating the distance from all nodes to the goal.
+    search_tree : Type[SearchTreePQD]
+        The search tree to use.
+
+    Returns
+    -------
+    Tuple[bool, Optional[Node], int, int, Optional[Iterable[Node]], Optional[Iterable[Node]]]
+        Tuple containing:
+        - A boolean indicating if a path was found.
+        - The last node in the found path or None.
+        - Number of algorithm iterations.
+        - Size of the resultant search tree.
+        - OPEN set nodes for visualization or None.
+        - CLOSED set nodes.
+    """
+
+    return jump_point_search(task_map, start_i, start_j, goal_i, goal_j, heuristic_func(*task_map.get_size(), goal_i, goal_j), search_tree, node_type=node_type)
 
 
 

@@ -85,7 +85,7 @@ class Downsample(nn.Module):
         return x
     
 class Encoder(nn.Module):
-    def __init__(self, in_channels, hidden_channels, downsample_steps, dropout=0.1):
+    def __init__(self, in_channels, hidden_channels, downsample_steps, dropout=0.1, skip=False):
         super().__init__()
         self.layers = nn.ModuleList([
             nn.Conv2d(
@@ -103,11 +103,15 @@ class Encoder(nn.Module):
                     Downsample(hidden_channels)
                 )
             )
+        self.skip = skip
 
     def forward(self, x):
+        skip_conns = []
         for layer in self.layers:
             x = layer(x)
-        return x
+            if self.skip:
+                skip_conns.append(x)
+        return x, skip_conns
     
 class Upsample(nn.Module):
     def __init__(self, in_channels):
@@ -126,7 +130,7 @@ class Upsample(nn.Module):
         return x
     
 class Decoder(nn.Module):
-    def __init__(self, hidden_channels, out_channels, upsample_steps, dropout=0.1):
+    def __init__(self, hidden_channels, out_channels, upsample_steps, dropout=0.1, skip=False):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(upsample_steps):
@@ -145,10 +149,15 @@ class Decoder(nn.Module):
             stride=1,
             padding=1
         )
+        self.skip = skip
 
-    def forward(self, x):
-        for layer in self.layers:
+    def forward(self, x, skip_conns):
+        if self.skip:
+            x += skip_conns[-1]
+        for i, layer in enumerate(self.layers):
             x = layer(x)
+            if self.skip:
+                x += skip_conns[-i - 2]
         x = self.norm(x)
         x = self.silu(x)
         x = self.conv_out(x)
@@ -308,11 +317,12 @@ class TransPathModel(nn.Module):
                 cnn_dropout=0.15,
                 attn_dropout=0.15,
                 downsample_steps=3, 
+                skip=False,
                 resolution=(64, 64)):
         super().__init__()
         
-        self.encoder = Encoder(in_channels, hidden_channels, downsample_steps, cnn_dropout)
-        self.decoder = Decoder(hidden_channels, out_channels, downsample_steps, cnn_dropout)
+        self.encoder = Encoder(in_channels, hidden_channels, downsample_steps, cnn_dropout, skip)
+        self.decoder = Decoder(hidden_channels, out_channels, downsample_steps, cnn_dropout, skip)
         
         self.encoder_pos = PosEmbeds(
             hidden_channels, 
@@ -331,11 +341,11 @@ class TransPathModel(nn.Module):
         )
 
     def forward(self, x):
-        x = self.encoder(x)
+        x, skip_conns = self.encoder(x)
         x = self.encoder_pos(x)
         x = self.transformer(x)
         x = self.decoder_pos(x)
-        x = self.decoder(x)
+        x = self.decoder(x, skip_conns)
         return x
     
 class TransPathLit(L.LightningModule):

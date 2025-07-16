@@ -505,7 +505,6 @@ if __name__ == "__main__":
     limit_val_batches   = config["limit_val_batches"]
     proj_name           = config["proj_name"]
     flag                = config["flag"]
-    run_name            = f"ds={dataset}, bs={batch_size}, ep={max_epochs}, lr={learning_rate}, OneCycle={flag}"
     accelerator         = config["accelerator"]
     devices             = config["devices"]
     checkpoints_dir     = config.get("checkpoints_dir")
@@ -514,6 +513,7 @@ if __name__ == "__main__":
     continue_learning: bool   = config["continue_learning"]
     img_size: int         = config["img_size"]
     skip: bool              = config["skip"]
+    run_name            = f"ds={dataset}, bs={batch_size}, ep={max_epochs}, lr={learning_rate}, OneCycle={flag}, skip={skip}"
 
     torch.set_default_device(torch.device(f"cuda:{devices[-1]}"))
 

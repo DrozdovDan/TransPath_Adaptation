@@ -12,8 +12,9 @@ accelerator: cuda
 devices: [6]
 checkpoints_dir: ./checkpoints/
 weights_dir: ./weights/
-continue_learning: False
-checkpoint: ""
+# continue_learning: False
+continue_learning: True
+checkpoint: "/home/drozdovdan/TransPath_Adaptation/analysis/checkpoints/ds=/home/silvarum/TransPath_Adaptation/datasets/128/beta, bs=512, ep=50, lr=0.008, OneCycle=True-ep32-0.00038-date:13072025_155132.ckpt"
 flag: True
 img_size: 128
 skip: True
