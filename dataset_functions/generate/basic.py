@@ -1,8 +1,14 @@
 import numpy as np
 from tqdm import tqdm
+import sys
+import os
+
+# Добавляем директорию на один уровень выше
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from ABCD.ABCD import generate_BCD
 from map_generators.pfu    import *
+from map_generators.figures import figures
 from map_generators.figures import *
 from utils import find_bad_gen_indices
 
@@ -24,7 +30,7 @@ def basic_generator(dataset, label, N):
     return generate_BCD(np.array([generator() for _ in tqdm(range(N), desc=f"{label} are generating")]))
 
 
-def chAnge(label, num_of_bad_generations):
+def chAnge(dataset, label, num_of_bad_generations):
     """
     Пытается сгенерировать {num_of_bad_generations} корректных
      генераций (чтобы на уровне выше заменили некорректные на них)
@@ -45,7 +51,7 @@ def chAnge(label, num_of_bad_generations):
         if i > 10:
             print(f"Я не справился с тем, чтобы сгенерировать {label}")
             exit(52)
-        change = basic_generator(label, i * num_of_bad_generations)
+        change = basic_generator(dataset, label, i * num_of_bad_generations)
         bag_gen_indices = find_bad_gen_indices(change)
         # В таком случае не сможем заменить плохо сгенерированные изначально
         if len(bag_gen_indices) > num_of_bad_generations * (i - 1):
@@ -64,11 +70,11 @@ def chAnge(label, num_of_bad_generations):
     return change[:num_of_bad_generations]
 
 
-def bad_generations_replacement_if_needed(gen_to_fix, label):
+def bad_generations_replacement_if_needed(dataset, gen_to_fix, label):
     broken_gen = find_bad_gen_indices(gen_to_fix)
     num_of_bad_generations = len(broken_gen)
     if num_of_bad_generations != 0:
-        replacement = chAnge(label, num_of_bad_generations)
+        replacement = chAnge(dataset, label, num_of_bad_generations)
         for i in range(num_of_bad_generations):
             index = broken_gen[i]
             gen_to_fix[index] = replacement[i]
@@ -89,7 +95,7 @@ def advanced_generator(dataset, label, N):
         ассоциированный с какой-то конкретной картой
     """
     gen = basic_generator(dataset, label, N)
-    bad_generations_replacement_if_needed(gen, label)
+    bad_generations_replacement_if_needed(dataset, gen, label)
     return gen
 
 
@@ -113,3 +119,6 @@ def generate_dataset(dataset, N):
 
 # def generate_dataset_by_label(label, N):
 #     return generate_hard_map_by_label(label, N) 
+if __name__ == "__main__":
+    print("fuck")
+    generate_dataset(figures, 66)

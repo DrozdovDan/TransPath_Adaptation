@@ -188,7 +188,7 @@ def sample_random_parameters():
 
 # --- Финальная функция генерации дискретной карты ---
 
-def generate_figures(grid_size=64):
+def generate_figures(grid_size=128):
     """
     Финальная функция, которая не принимает входных параметров.
     Генерирует случайные параметры, создает набор фигур и возвращает дискретную карту (матрицу)
@@ -198,4 +198,4 @@ def generate_figures(grid_size=64):
     figures = sample_map(total_area, n_figures, type_ratios, figure_generator, map_size=grid_size)
     discrete_map = sample_discrete_map(figures, grid_size=grid_size)
     # Возвращаем также параметры для отображения в заголовке (опционально)
-    return discrete_map & np.random.choice([0, 1], size=(64, 64), p=[0.15, 0.85])
+    return discrete_map & np.random.choice([0, 1], size=(grid_size, grid_size), p=[0.15, 0.85])
