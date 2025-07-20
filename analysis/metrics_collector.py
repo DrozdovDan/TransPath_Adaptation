@@ -27,7 +27,8 @@ from astar import (
         SearchTreePQD, make_path, 
         draw_simple, 
         Node, 
-        multi_global_octile_distance
+        multi_global_octile_distance,
+        jps_func
     )
 import os
 
@@ -238,7 +239,39 @@ def cfastar_octile_search_with_prediction(cells: np.ndarray, starts: np.ndarray,
     
     return cfastar_octile_search(cells, starts, goals, predictions, node_type=node_type, verbose=verbose)
 
-def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws: list[int]=None, cfs: np.ndarray=None, model: nn.Module=None, input_type: str='goals', save_predictions_to: str=None, baseline: pd.DataFrame=None, save_baseline_to: str=None, node_type: str='optimal', threshold: float=1.0, verbose: int=1):
+def jps_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, node_type: str='optimal', verbose: int=1):
+    assert cells.shape[0] == starts.shape[0] == goals.shape[0]
+
+    metrics = {'index' : [], 'path_length' : [], 'expanded_nodes_num' : []}
+    nonexistent_paths = []
+    iterator = range(cells.shape[0])
+    if verbose > 0:
+        iterator = trange(cells.shape[0], desc='Jump point octile search')
+    for i in iterator:
+        grid = Map(cells[i, 0])
+        result = jps_func(grid, *starts[i], *goals[i], global_octile_distance, SearchTreePQD, node_type=node_type)
+        if not result[0]:
+            nonexistent_paths.append(i)
+            if verbose > 1:
+                draw_simple(grid, *starts[i], *goals[i], None, result[-2], result[-1])
+                verbose -= 1
+            continue
+        path, length = make_path(result[1])
+        metrics['index'].append(i)
+        metrics['path_length'].append(length)
+        metrics['expanded_nodes_num'].append(len(result[-1]))
+        if verbose > 1:
+            draw_simple(grid, *starts[i], *goals[i], path, result[-2], result[-1])
+            verbose -= 1
+    if verbose > 0:
+        print(f'During the search was discovered {len(nonexistent_paths)} non-existent paths')
+        if nonexistent_paths:
+            print(f'Indices of tasks with non-existent paths:')
+            print(*nonexistent_paths)
+    
+    return pd.DataFrame.from_dict(metrics)
+
+def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws: list[int]=None, jps: bool=False, cfs: np.ndarray=None, model: nn.Module=None, input_type: str='goals', save_predictions_to: str=None, baseline: pd.DataFrame=None, save_baseline_to: str=None, node_type: str='optimal', threshold: float=1.0, verbose: int=1):
     assert (cfs is not None) ^ (model is not None)
 
     baseline_complexity = None
@@ -272,9 +305,16 @@ def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws:
             w_dfs[w] = wastar_octile_search(cells, starts, goals, w, node_type=node_type, verbose=verbose)
             if baseline_complexity is not None:
                 w_dfs[w] = w_dfs[w][baseline_complexity['complexity'] >= threshold]
+    
+    if jps:
+        jps_df = jps_octile_search(cells, starts, goals, node_type=node_type, verbose=verbose)
+        if baseline_complexity is not None:
+            jps_df = jps[baseline_complexity['complexity'] >= threshold]
 
     baseline_array = baseline[['path_length', 'expanded_nodes_num']].to_numpy()
     model_array = model_df[['path_length', 'expanded_nodes_num']].to_numpy()
+    if jps:
+        jps_array = jps_df[['path_length', 'expanded_nodes_num']].to_numpy()
 
     w_arrays = {}
 
@@ -288,6 +328,9 @@ def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws:
 
     if w_arrays:
         results.update({f'w={w}' : pd.DataFrame(array / baseline_array, columns=['path_length', 'expanded_nodes_num']) for w, array in w_arrays.items()})
+    
+    if jps:
+        results['jps'] = pd.DataFrame(jps_array / baseline_array, columns=['path_length', 'expanded_nodes_num'])
 
     return results
 

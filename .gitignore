@@ -180,3 +180,5 @@ testset.npy.zip
 results/train/*.npy
 results/testset.npy
 results/zipped_train/*.npz
+figures.tar.xz
+figures
