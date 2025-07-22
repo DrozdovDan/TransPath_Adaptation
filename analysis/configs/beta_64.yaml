@@ -9,14 +9,17 @@ limit_val_batches: null
 proj_name: TransPath_runs_64
 run_name: bs=512_ep=50_lr=0.008_ff=ff_res=64
 accelerator: cuda
-devices: [6]
+devices: [0]
 checkpoints_dir: ./checkpoints/
 weights_dir: ./weights/
 continue_learning: False
 # continue_learning: True
-# checkpoint: "/home/drozdovdan/TransPath_Adaptation/analysis/checkpoints/ds=/home/silvarum/TransPath_Adaptation/datasets/128/beta, bs=512, ep=50, lr=0.008, OneCycle=True-ep32-0.00038-date:13072025_155132.ckpt"
+# checkpoint: "/home/drozdovdan/TransPath_Adaptation/analysis/checkpoints/model_name=MambaPathModel, ds=/home/drozdovdan/TransPath_Adaptation/Big_QRs, bs=512, ep=50, lr=0.008, OneCycle=True, skip=True, downsample_steps=3, embeddings=False-ep44-0.00041-date:21072025_153937.ckpt"
 checkpoint: ""
 flag: True
 img_size: 64
-skip: False
+skip: True
+downsample_steps: 3
+embeddings: True
+wandb_report: True
 # skip: False

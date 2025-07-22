@@ -20,7 +20,7 @@ import wandb
 import multiprocessing
 import matplotlib.pyplot as plt
 from lightning.pytorch.callbacks import LearningRateMonitor
-from model import TransPathModel
+from model import TransPathModel, MambaPathModel
 
 def maskedMSELoss(prediction, target, mask):
     N = torch.sum(mask)
@@ -152,6 +152,7 @@ def load_config(config_path):
 # Configuration
 if __name__ == "__main__":
     config = load_config(sys.argv[1])  # или sys.argv[1] для указания при запуске
+    model_name          = config["model_name"]
     mode                = config["mode"]
     dataset             = config["dataset"]
     batch_size          = config["batch_size"]
@@ -171,7 +172,9 @@ if __name__ == "__main__":
     img_size: int         = config["img_size"]
     skip: bool              = config["skip"]
     downsample_steps: bool  = config["downsample_steps"]
-    run_name            = f"ds={dataset}, bs={batch_size}, ep={max_epochs}, lr={learning_rate}, OneCycle={flag}, skip={skip}, downsample_steps={downsample_steps}"
+    embeddings: bool        = config["embeddings"]
+    wandb_report: bool      = config["wandb_report"]
+    run_name            = f"model_name={model_name}, ds={dataset}, bs={batch_size}, ep={max_epochs}, lr={learning_rate}, OneCycle={flag}, skip={skip}, downsample_steps={downsample_steps}, embeddings={embeddings}"
 
     torch.set_default_device(torch.device(f"cuda:{devices[-1]}"))
 
@@ -213,7 +216,8 @@ if __name__ == "__main__":
                                   save_weights_only=False, 
                                   verbose=True,
                                   )
-    wandb_logger = WandbLogger(project=proj_name, name=f'{run_name}_{mode}', log_model='all')
+    if wandb_report:
+        wandb_logger = WandbLogger(project=proj_name, name=f'{run_name}_{mode}', log_model='all')
 
     # checkpoints = ModelCheckpoint(
     #     dirpath="best_weights",             # куда сохранять
@@ -229,7 +233,10 @@ if __name__ == "__main__":
 
 
     # Initialize model
-    model = TransPathModel(resolution=resolution, skip=skip, downsample_steps=downsample_steps)
+    if model_name == 'MambaPathModel':
+        model = MambaPathModel(resolution=resolution, skip=skip, downsample_steps=downsample_steps, embeddings=embeddings)
+    else:
+        model = TransPathModel(resolution=resolution, skip=skip, downsample_steps=downsample_steps, embeddings=embeddings)
 
     lit_module = TransPathLit(
         model=model,
@@ -241,16 +248,27 @@ if __name__ == "__main__":
 
     lr_monitor = LearningRateMonitor(logging_interval="epoch")   # или "step"
 
-    trainer = L.Trainer(
-        logger=wandb_logger,
-        accelerator=accelerator,
-        devices=devices,
-        max_epochs=max_epochs,
-        deterministic=False,
-        limit_train_batches=limit_train_batches,
-        limit_val_batches=limit_val_batches,
-        callbacks=[checkpoints, callback, lr_monitor],
-    )
+    if wandb_report:
+        trainer = L.Trainer(
+            logger=wandb_logger,
+            accelerator=accelerator,
+            devices=devices,
+            max_epochs=max_epochs,
+            deterministic=False,
+            limit_train_batches=limit_train_batches,
+            limit_val_batches=limit_val_batches,
+            callbacks=[checkpoints, callback, lr_monitor],
+        )
+    else:
+        trainer = L.Trainer(
+            accelerator=accelerator,
+            devices=devices,
+            max_epochs=max_epochs,
+            deterministic=False,
+            limit_train_batches=limit_train_batches,
+            limit_val_batches=limit_val_batches,
+            callbacks=[checkpoints, lr_monitor],
+        )
 
 
     if continue_learning:

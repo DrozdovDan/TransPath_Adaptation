@@ -17,6 +17,7 @@ from typing import Any
 import wandb
 import multiprocessing
 import matplotlib.pyplot as plt
+from mamba_ssm import Mamba2, Mamba
 
 class ResNetBlock(nn.Module):
     def __init__(self, in_channels, out_channels=None, dropout=0.1):
@@ -106,6 +107,39 @@ class Encoder(nn.Module):
         self.skip = skip
 
     def forward(self, x):
+        skip_conns = []
+        for layer in self.layers:
+            x = layer(x)
+            if self.skip:
+                skip_conns.append(x)
+        return x, skip_conns
+    
+class EmbeddingsEncoder(nn.Module):
+    def __init__(self, in_channels, hidden_channels, downsample_steps, dropout=0.1, skip=False):
+        super().__init__()
+        self.register_buffer('multiplicator', 2.0 ** torch.arange(in_channels).reshape(-1, 1))
+        self.embeddings = nn.Embedding(2 ** in_channels, in_channels)
+        self.layers = nn.ModuleList([
+            nn.Conv2d(
+                in_channels, 
+                hidden_channels, 
+                kernel_size=5, 
+                stride=1, 
+                padding=2
+            )
+        ])
+        for _ in range(downsample_steps):
+            self.layers.append(
+                nn.Sequential(
+                    ResNetBlock(hidden_channels, hidden_channels, dropout),
+                    Downsample(hidden_channels)
+                )
+            )
+        self.skip = skip
+
+    def forward(self, x):
+        x = (x.permute(0, 2, 3, 1).float() @ self.multiplicator).squeeze(dim=3).long()
+        x = self.embeddings(x).permute(0, 3, 1, 2)
         skip_conns = []
         for layer in self.layers:
             x = layer(x)
@@ -293,7 +327,7 @@ class SpatialTransformer(nn.Module):
         self.norm = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
         self.transformer_blocks = nn.ModuleList(
             [BasicTransformerBlock(in_channels, num_heads, dropout=dropout, context_dim=context_dim)
-                for d in range(depth)]
+                for _ in range(depth)]
         )
 
     def forward(self, x, context=None):
@@ -304,6 +338,40 @@ class SpatialTransformer(nn.Module):
         f = rearrange(f, 'b c h w -> b (h w) c')
         for block in self.transformer_blocks:
             f = block(f, context=context)
+        f = rearrange(f, 'b (h w) c -> b c h w', h=h, w=w)
+        return f + x
+    
+class SpatialMamba(nn.Module):
+    """
+    Mamba block for image-like data.
+    First, project the input (aka embedding)
+    and reshape to b, t, d.
+    Then apply standard mamba action.
+    Finally, reshape to image
+    """
+    def __init__(self, in_channels,
+                 depth=4, d_conv=4, expand=2):
+        super().__init__()
+        self.in_channels = in_channels
+        
+        self.norm = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+        self.mamba_blocks = nn.ModuleList(
+            [Mamba(
+                d_model=in_channels, 
+                d_state=in_channels, 
+                d_conv=d_conv, 
+                expand=expand
+                )
+                for _ in range(depth)]
+        )
+
+    def forward(self, x):
+        b, c, h, w = x.shape
+        f = x
+        f = self.norm(f)
+        f = rearrange(f, 'b c h w -> b (h w) c')
+        for block in self.mamba_blocks:
+            f = block(f)
         f = rearrange(f, 'b (h w) c -> b c h w', h=h, w=w)
         return f + x
     
@@ -318,10 +386,15 @@ class TransPathModel(nn.Module):
                 attn_dropout=0.15,
                 downsample_steps=3, 
                 skip=False,
+                embeddings=False,
                 resolution=(64, 64)):
         super().__init__()
         
-        self.encoder = Encoder(in_channels, hidden_channels, downsample_steps, cnn_dropout, skip)
+        if embeddings:
+            self.encoder = EmbeddingsEncoder(in_channels, hidden_channels, downsample_steps, cnn_dropout, skip)
+        else:
+            self.encoder = Encoder(in_channels, hidden_channels, downsample_steps, cnn_dropout, skip)
+
         self.decoder = Decoder(hidden_channels, out_channels, downsample_steps, cnn_dropout, skip)
         
         self.encoder_pos = PosEmbeds(
@@ -344,6 +417,52 @@ class TransPathModel(nn.Module):
         x, skip_conns = self.encoder(x)
         x = self.encoder_pos(x)
         x = self.transformer(x)
+        x = self.decoder_pos(x)
+        x = self.decoder(x, skip_conns)
+        return x
+    
+class MambaPathModel(nn.Module):
+    def __init__(self, 
+                in_channels=2, 
+                out_channels=1, 
+                hidden_channels=64,
+                mamba_blocks=4,
+                d_conv=4,
+                expand=2,
+                cnn_dropout=0.15,
+                downsample_steps=3, 
+                skip=False,
+                embeddings=False,
+                resolution=(64, 64)):
+        super().__init__()
+        
+        if embeddings:
+            self.encoder = EmbeddingsEncoder(in_channels, hidden_channels, downsample_steps, cnn_dropout, skip)
+        else:
+            self.encoder = Encoder(in_channels, hidden_channels, downsample_steps, cnn_dropout, skip)
+
+        self.decoder = Decoder(hidden_channels, out_channels, downsample_steps, cnn_dropout, skip)
+        
+        self.encoder_pos = PosEmbeds(
+            hidden_channels, 
+            (resolution[0] // 2**downsample_steps, resolution[1] // 2**downsample_steps)
+        )
+        self.decoder_pos = PosEmbeds(
+            hidden_channels, 
+            (resolution[0] // 2**downsample_steps, resolution[1] // 2**downsample_steps)
+        )
+
+        self.mamba = SpatialMamba(
+            hidden_channels, 
+            mamba_blocks,
+            d_conv, 
+            expand
+        )
+
+    def forward(self, x):
+        x, skip_conns = self.encoder(x)
+        x = self.encoder_pos(x)
+        x = self.mamba(x)
         x = self.decoder_pos(x)
         x = self.decoder(x, skip_conns)
         return x
