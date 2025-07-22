@@ -182,3 +182,5 @@ results/testset.npy
 results/zipped_train/*.npz
 figures.tar.xz
 figures
+gcn/gcn_dataset
+datasets

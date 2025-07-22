@@ -219,19 +219,6 @@ if __name__ == "__main__":
     if wandb_report:
         wandb_logger = WandbLogger(project=proj_name, name=f'{run_name}_{mode}', log_model='all')
 
-    # checkpoints = ModelCheckpoint(
-    #     dirpath="best_weights",             # куда сохранять
-    #     filename=f"{run_name}best-{{epoch:02d}}-{{val_acc:.4f}}",  # имя файла
-    #     monitor="val_acc",                 # по какой метрике следить
-    #     mode="max",                        # метрику надо максимизировать
-    #     save_top_k=3,                      # сохраняем только лучший
-    #     save_weights_only=False,          # сохраняем весь LightningModule
-    #     verbose=True,
-    #     auto_insert_metric_name = False
-    # )
-
-
-
     # Initialize model
     if model_name == 'MambaPathModel':
         model = MambaPathModel(resolution=resolution, skip=skip, downsample_steps=downsample_steps, embeddings=embeddings)
