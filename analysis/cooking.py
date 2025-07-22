@@ -13,14 +13,14 @@ import numpy as np
 from einops import rearrange
 import lightning as L
 from lightning.pytorch.utilities.types import STEP_OUTPUT
-from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
 from typing import Any
 import wandb
 import multiprocessing
 import matplotlib.pyplot as plt
 from lightning.pytorch.callbacks import LearningRateMonitor
-from model import TransPathModel, MambaPathModel
+from model import TransPathModel, MambaPathModel, MambaPathModel2
 
 def maskedMSELoss(prediction, target, mask):
     N = torch.sum(mask)
@@ -173,7 +173,7 @@ if __name__ == "__main__":
     skip: bool              = config["skip"]
     downsample_steps: bool  = config["downsample_steps"]
     embeddings: bool        = config["embeddings"]
-    wandb_report: bool      = config["wandb_report"]
+    report_to               = config["report_to"]
     run_name            = f"model_name={model_name}, ds={dataset}, bs={batch_size}, ep={max_epochs}, lr={learning_rate}, OneCycle={flag}, skip={skip}, downsample_steps={downsample_steps}, embeddings={embeddings}"
 
     torch.set_default_device(torch.device(f"cuda:{devices[-1]}"))
@@ -216,8 +216,10 @@ if __name__ == "__main__":
                                   save_weights_only=False, 
                                   verbose=True,
                                   )
-    if wandb_report:
+    if report_to == 'wandb':
         wandb_logger = WandbLogger(project=proj_name, name=f'{run_name}_{mode}', log_model='all')
+    elif report_to == 'tensorboard':
+        tb_logger = TensorBoardLogger("tb_logs", name=f'{run_name}_{mode}')
 
     # Initialize model
     if model_name == 'MambaPathModel':
@@ -235,7 +237,7 @@ if __name__ == "__main__":
 
     lr_monitor = LearningRateMonitor(logging_interval="epoch")   # или "step"
 
-    if wandb_report:
+    if report_to == 'wandb':
         trainer = L.Trainer(
             logger=wandb_logger,
             accelerator=accelerator,
@@ -245,6 +247,17 @@ if __name__ == "__main__":
             limit_train_batches=limit_train_batches,
             limit_val_batches=limit_val_batches,
             callbacks=[checkpoints, callback, lr_monitor],
+        )
+    elif report_to == 'tensorboard':
+        trainer = L.Trainer(
+            logger=tb_logger,
+            accelerator=accelerator,
+            devices=devices,
+            max_epochs=max_epochs,
+            deterministic=False,
+            limit_train_batches=limit_train_batches,
+            limit_val_batches=limit_val_batches,
+            callbacks=[checkpoints, lr_monitor],
         )
     else:
         trainer = L.Trainer(

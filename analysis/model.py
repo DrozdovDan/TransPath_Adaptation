@@ -467,6 +467,40 @@ class MambaPathModel(nn.Module):
         x = self.decoder(x, skip_conns)
         return x
     
+class MambaPathModel2(nn.Module):
+    def __init__(
+            self,
+            in_channels=2, 
+            out_channels=1,
+            hidden_channels=64,
+            mamba_blocks=8,
+            d_conv=4,
+            expand=2,
+            resolution=(64, 64)):
+        
+        super().__init__()
+        self.register_buffer('multiplicator', 2.0 ** torch.arange(in_channels).reshape(-1, 1))
+        self.embeddings = nn.Embedding(2 ** in_channels, hidden_channels)
+        self.pos_embeds = PosEmbeds(
+            hidden_channels, 
+            resolution
+        )
+        self.mamba = SpatialMamba(
+            hidden_channels, 
+            mamba_blocks,
+            d_conv, 
+            expand
+        )
+        self.fc = nn.Linear(hidden_channels, out_channels)
+
+    def forward(self, x):
+        x = (x.permute(0, 2, 3, 1).float() @ self.multiplicator).squeeze(dim=3).long()
+        x = self.embeddings(x).permute(0, 3, 1, 2)
+        x = self.pos_embeds(x)
+        x = self.mamba(x)
+        x = self.fc(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        return F.tanh(x)
+    
 class TransPathLit(L.LightningModule):
     def __init__(self, model: nn.Module, mode: str='f', learning_rate: float=1e-4, weight_decay: float=0.0) -> None:
         super().__init__()
