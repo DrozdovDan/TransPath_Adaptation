@@ -157,7 +157,7 @@ def create_TransPath_model(model_name=TransPathModel, weights_path: str=None, de
     torch_device = torch.device(device)
     model = model_name(**kwargs)
     if weights_path:
-        model.load_state_dict(torch.load(weights_path, weights_only=True))
+        model.load_state_dict(torch.load(weights_path, weights_only=True), strict=False)
     model.to(torch_device)
     return model
 
@@ -272,7 +272,7 @@ def jps_octile_search(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, 
     return pd.DataFrame.from_dict(metrics)
 
 def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws: list[int]=None, jps: bool=False, cfs: np.ndarray=None, model: nn.Module=None, input_type: str='goals', save_predictions_to: str=None, baseline: pd.DataFrame=None, save_baseline_to: str=None, node_type: str='optimal', threshold: float=1.0, verbose: int=1):
-    assert (cfs is not None) ^ (model is not None)
+    assert (cfs is None) or (model is None)
 
     baseline_complexity = None
 
@@ -289,10 +289,10 @@ def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws:
     
     if model:
         model_df = cfastar_octile_search_with_prediction(cells, starts, goals, model, save_predictions_to, input_type=input_type, node_type=node_type, verbose=verbose)
-    else:
+    elif cfs:
         model_df = cfastar_octile_search(cells, starts, goals, cfs, node_type=node_type, verbose=verbose)
     
-    if baseline_complexity is not None:
+    if baseline_complexity is not None and model_df is not None:
         model_df = model_df[baseline_complexity['complexity'] >= threshold]
 
     w_dfs = {}
@@ -312,7 +312,8 @@ def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws:
             jps_df = jps[baseline_complexity['complexity'] >= threshold]
 
     baseline_array = baseline[['path_length', 'expanded_nodes_num']].to_numpy()
-    model_array = model_df[['path_length', 'expanded_nodes_num']].to_numpy()
+    if model_df:
+        model_array = model_df[['path_length', 'expanded_nodes_num']].to_numpy()
     if jps:
         jps_array = jps_df[['path_length', 'expanded_nodes_num']].to_numpy()
 
@@ -324,7 +325,8 @@ def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws:
     results = {}
 
     results['baseline'] = pd.DataFrame(baseline_array / baseline_array, columns=['path_length', 'expanded_nodes_num'])
-    results['model'] = pd.DataFrame(model_array / baseline_array, columns=['path_length', 'expanded_nodes_num'])
+    if model_df:
+        results['model'] = pd.DataFrame(model_array / baseline_array, columns=['path_length', 'expanded_nodes_num'])
 
     if w_arrays:
         results.update({f'w={w}' : pd.DataFrame(array / baseline_array, columns=['path_length', 'expanded_nodes_num']) for w, array in w_arrays.items()})
@@ -370,18 +372,32 @@ def get_metrics(results: dict, metrics: list=['Optimal found ratio', 'Length rat
 
     return pd.DataFrame(data=ret, index=idxes)
 
-def get_splitted_metrics(dir_path: str, model: nn.Module, ws: list[int]=None, split_to: int=10, node_type: str='optimal', threshold: float=1.0, metrics: list=['Optimal found ratio', 'Length ratio', 'Expansions ratio'], verbose: int=0):
+def get_splitted_metrics(dir_path: str, model: nn.Module=None, cfs_filename: str=None, ws: list[int]=None, split_to: int=10, node_type: str='optimal', threshold: float=1.0, metrics: list=['Optimal found ratio', 'Length ratio', 'Expansions ratio'], verbose: int=0):
+    assert (model is None) or (cfs_filename is None)
     assert split_to > 0 and isinstance(split_to, int), 'split_to should be a positive int value'
-    cells, starts, goals, _ = data_from_dir(dir_path)
+    if cfs_filename is not None:
+        cells, starts, goals, cfs = data_from_dir(dir_path, cfs_filename=cfs_filename)
+    else:
+        cells, starts, goals, cfs = data_from_dir(dir_path)
     batch_size = len(cells) // split_to
     dfs = []
     for lower_bound_index in range(0, len(cells), batch_size):
         upper_bound_index = min(len(cells), lower_bound_index + batch_size)
-        results = contain_ratios(cells[lower_bound_index:upper_bound_index], 
+        if cfs is None:
+            results = contain_ratios(cells[lower_bound_index:upper_bound_index], 
                                  starts[lower_bound_index:upper_bound_index],
                                  goals[lower_bound_index:upper_bound_index],
                                  ws,
                                  model=model,
+                                 node_type=node_type,
+                                 threshold=threshold,
+                                 verbose=verbose)
+        else:
+            results = contain_ratios(cells[lower_bound_index:upper_bound_index], 
+                                 starts[lower_bound_index:upper_bound_index],
+                                 goals[lower_bound_index:upper_bound_index],
+                                 ws,
+                                 cfs=cfs[lower_bound_index:upper_bound_index],
                                  node_type=node_type,
                                  threshold=threshold,
                                  verbose=verbose)

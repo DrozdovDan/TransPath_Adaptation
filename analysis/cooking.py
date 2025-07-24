@@ -13,7 +13,7 @@ import numpy as np
 from einops import rearrange
 import lightning as L
 from lightning.pytorch.utilities.types import STEP_OUTPUT
-from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
+from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger, CometLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
 from typing import Any
 import wandb
@@ -220,10 +220,14 @@ if __name__ == "__main__":
         wandb_logger = WandbLogger(project=proj_name, name=f'{run_name}_{mode}', log_model='all')
     elif report_to == 'tensorboard':
         tb_logger = TensorBoardLogger("tb_logs", name=f'{run_name}_{mode}')
+    elif report_to == "comet_ml":
+        comet_logger = CometLogger(api_key=os.environ.get("COMET_API_KEY"), workspace=os.environ.get("COMET_WORKSPACE"), project_name=proj_name, experiment_name=f'{run_name}_{mode}')
 
     # Initialize model
     if model_name == 'MambaPathModel':
         model = MambaPathModel(resolution=resolution, skip=skip, downsample_steps=downsample_steps, embeddings=embeddings)
+    elif model_name == 'MambaPathModel2':
+        model = MambaPathModel2(resolution=resolution)
     else:
         model = TransPathModel(resolution=resolution, skip=skip, downsample_steps=downsample_steps, embeddings=embeddings)
 
@@ -251,6 +255,17 @@ if __name__ == "__main__":
     elif report_to == 'tensorboard':
         trainer = L.Trainer(
             logger=tb_logger,
+            accelerator=accelerator,
+            devices=devices,
+            max_epochs=max_epochs,
+            deterministic=False,
+            limit_train_batches=limit_train_batches,
+            limit_val_batches=limit_val_batches,
+            callbacks=[checkpoints, lr_monitor],
+        )
+    elif report_to == "comet_ml":
+        trainer = L.Trainer(
+            logger=comet_logger,
             accelerator=accelerator,
             devices=devices,
             max_epochs=max_epochs,

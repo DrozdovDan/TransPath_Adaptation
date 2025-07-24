@@ -1,8 +1,8 @@
-model_name: 'MambaPathModel'
+model_name: 'MambaPathModel2'
 mode: cf
 dataset: /home/drozdovdan/TransPath_Adaptation/Big_QRs
-batch_size: 512
-max_epochs: 60
+batch_size: 256
+max_epochs: 100
 learning_rate: 0.008
 weight_decay: 0.0
 limit_train_batches: null
@@ -21,6 +21,6 @@ flag: True
 img_size: 64
 skip: True
 downsample_steps: 3
-embeddings: True
-report_to: 'tensorboard'
-# skip: False
+embeddings: False
+report_to: 'comet_ml'
+#skip: False

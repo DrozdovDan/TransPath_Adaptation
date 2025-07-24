@@ -223,6 +223,16 @@ class PosEmbeds(nn.Module):
     def change_resolution(self, resolution, max_v):
         self.grid = nn.Parameter(Tensor(build_grid(resolution, max_v)), requires_grad=False)
 
+class NormalPosEmbeds(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.linear = nn.Linear(4, hidden_size)
+
+    def forward(self, inputs):
+        b, c, h, w = inputs.shape
+        pos_emb = self.linear(torch.tensor(build_grid((h, w)), device=inputs.device)).moveaxis(3, 1)
+        return inputs + pos_emb
+
 class FeedForward(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels=None, dropout=0.2):
         super().__init__()
@@ -404,6 +414,49 @@ class TransPathModel(nn.Module):
         self.decoder_pos = PosEmbeds(
             hidden_channels, 
             (resolution[0] // 2**downsample_steps, resolution[1] // 2**downsample_steps)
+        )
+
+        self.transformer = SpatialTransformer(
+            hidden_channels, 
+            attn_heads,
+            attn_blocks, 
+            attn_dropout
+        )
+
+    def forward(self, x):
+        x, skip_conns = self.encoder(x)
+        x = self.encoder_pos(x)
+        x = self.transformer(x)
+        x = self.decoder_pos(x)
+        x = self.decoder(x, skip_conns)
+        return x
+    
+class NormalTransPathModel(nn.Module):
+    def __init__(self, 
+                in_channels=2, 
+                out_channels=1, 
+                hidden_channels=64,
+                attn_blocks=4,
+                attn_heads=4,
+                cnn_dropout=0.15,
+                attn_dropout=0.15,
+                downsample_steps=3, 
+                skip=False,
+                embeddings=False):
+        super().__init__()
+        
+        if embeddings:
+            self.encoder = EmbeddingsEncoder(in_channels, hidden_channels, downsample_steps, cnn_dropout, skip)
+        else:
+            self.encoder = Encoder(in_channels, hidden_channels, downsample_steps, cnn_dropout, skip)
+
+        self.decoder = Decoder(hidden_channels, out_channels, downsample_steps, cnn_dropout, skip)
+        
+        self.encoder_pos = NormalPosEmbeds(
+            hidden_channels
+        )
+        self.decoder_pos = NormalPosEmbeds(
+            hidden_channels
         )
 
         self.transformer = SpatialTransformer(
