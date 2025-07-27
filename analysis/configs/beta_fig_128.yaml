@@ -1,0 +1,26 @@
+model_name: 'TransPathModel'
+mode: cf
+dataset: /home/silvarum/TransPath_Adaptation/datasets/128/betanoised_figures
+batch_size: 512
+max_epochs: 50
+learning_rate: 0.008
+weight_decay: 0.0
+limit_train_batches: null
+limit_val_batches: null
+proj_name: TransPath_runs_128
+run_name: bs=512_ep=50_lr=0.008_ff=ff_res=128
+accelerator: cuda
+devices: [3]
+checkpoints_dir: ./checkpoints/
+weights_dir: ./weights/
+continue_learning: False
+# continue_learning: True
+# checkpoint: "/home/drozdovdan/TransPath_Adaptation/analysis/checkpoints/model_name=MambaPathModel, ds=/home/drozdovdan/TransPath_Adaptation/Big_QRs, bs=512, ep=50, lr=0.008, OneCycle=True, skip=True, downsample_steps=3, embeddings=False-ep44-0.00041-date:21072025_153937.ckpt"
+checkpoint: ""
+flag: True
+img_size: 128
+skip: True
+downsample_steps: 4
+embeddings: True
+report_to: 'comet_ml'
+# skip: False

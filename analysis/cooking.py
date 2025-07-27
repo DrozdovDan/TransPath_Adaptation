@@ -65,7 +65,7 @@ class TransPathLit(L.LightningModule):
         return loss
 
     def configure_optimizers(self) -> dict[str, Any]:
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+        optimizer = torch.optim.Adam([p for p in self.model.parameters() if p.requires_grad], lr=self.learning_rate, weight_decay=self.weight_decay)
         if self.flag_OneCycle:
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 optimizer, max_lr=self.learning_rate, total_steps=self.trainer.estimated_stepping_batches

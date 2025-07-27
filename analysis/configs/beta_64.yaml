@@ -1,3 +1,4 @@
+model_name: 'TransPathModel'
 mode: cf
 dataset: /home/drozdovdan/TransPath_Adaptation/Big_QRs
 batch_size: 512
@@ -9,7 +10,7 @@ limit_val_batches: null
 proj_name: TransPath_runs_64
 run_name: bs=512_ep=50_lr=0.008_ff=ff_res=64
 accelerator: cuda
-devices: [0]
+devices: [3]
 checkpoints_dir: ./checkpoints/
 weights_dir: ./weights/
 continue_learning: False
@@ -20,6 +21,6 @@ flag: True
 img_size: 64
 skip: True
 downsample_steps: 3
-embeddings: True
-wandb_report: True
+embeddings: False
+report_to: 'comet_ml'
 # skip: False

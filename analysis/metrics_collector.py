@@ -312,8 +312,10 @@ def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws:
             jps_df = jps[baseline_complexity['complexity'] >= threshold]
 
     baseline_array = baseline[['path_length', 'expanded_nodes_num']].to_numpy()
-    if model_df:
+
+    if model_df is not None:
         model_array = model_df[['path_length', 'expanded_nodes_num']].to_numpy()
+        
     if jps:
         jps_array = jps_df[['path_length', 'expanded_nodes_num']].to_numpy()
 
@@ -325,7 +327,8 @@ def contain_ratios(cells: np.ndarray, starts: np.ndarray, goals: np.ndarray, ws:
     results = {}
 
     results['baseline'] = pd.DataFrame(baseline_array / baseline_array, columns=['path_length', 'expanded_nodes_num'])
-    if model_df:
+
+    if model_df is not None:
         results['model'] = pd.DataFrame(model_array / baseline_array, columns=['path_length', 'expanded_nodes_num'])
 
     if w_arrays:
